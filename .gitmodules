@@ -1,0 +1,3 @@
+[submodule "SubModules/phnt"]
+	path = SubModules/phnt
+	url = https://github.com/winsiderss/phnt.git
