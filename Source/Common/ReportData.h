@@ -2,29 +2,32 @@
 
 namespace Vicra {
 enum class EReportFlags : USHORT {
-	AVOID_NONE = NULL,
+	None = NULL,
 
-	AVOID_VM_QUERY = ( 1 << 1 ),
-	AVOID_VM_PROTECT = ( 1 << 2 ),
-	AVOID_VM_INJECTION = ( 1 << 3 )
+	AvoidVMQuerying = ( 1 << 1 ),
+	AvoidVMProtection = ( 1 << 2 ),
+	AvoidCodeInjection = ( 1 << 3 ),
+	AvoidDebugging = ( 1 << 4 )
 };
 enum class EReportSeverity {
-	INFO,
-	SEVERE,
-	CRITICAL
+	Information,
+	Severe,
+	Critical
 };
 
 class ReportValue {
 public:
 	ReportValue(
+		const std::string& Message,
 		const std::string& Reason,
 		const std::string& URL,
 
-		const EReportSeverity Severity = EReportSeverity::INFO,
-		const EReportFlags Flags = EReportFlags::AVOID_NONE
-	) : Reason( Reason ), URL( URL ), Severity( Severity ), Flags( Flags ) { };
+		const EReportSeverity Severity = EReportSeverity::Information,
+		const EReportFlags Flags = EReportFlags::None
+	) : Message( Message ), Reason( Reason ), URL( URL ), Severity( Severity ), Flags( Flags ) { };
 
 public:
+	const std::string Message;
 	const std::string Reason;
 	const std::string URL;
 
@@ -34,17 +37,19 @@ public:
 public:
 	const std::string FormatSeverity( ) const {
 		switch ( Severity ) {
-		case EReportSeverity::INFO: return MSG_INFO;
-		case EReportSeverity::SEVERE: return MSG_SEVERE;
-		case EReportSeverity::CRITICAL: return MSG_CRITICAL;
+		case EReportSeverity::Information: return MSG_INFO;
+		case EReportSeverity::Severe: return MSG_SEVERE;
+		case EReportSeverity::Critical: return MSG_CRITICAL;
 		default: return "UKNOWN";
 		}
 	}
 	const std::string Format( ) const {
 		return std::format( 
-			"{}{} ( method: {} )",   
+			"{}{} ( Reason: {}, Method: {} )",   
 
 			FormatSeverity( ),
+			Message,
+
 			Reason,
 			URL
 		);

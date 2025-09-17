@@ -19,6 +19,8 @@
 #include "Detections/Memory.h"
 #include "Detections/Callbacks.h"
 #include "Detections/Objects.h"
-#include "Detections/Other.h"
+#include "Detections/Policies.h"
 
 #include "Managers/PluginManager.h"
+
+#define REQUIRED_MASK PROCESS_QUERY_INFORMATION | PROCESS_VM_READ | PROCESS_VM_WRITE

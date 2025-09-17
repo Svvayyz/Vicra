@@ -27,6 +27,7 @@ public:
 		const PVOID pProcessInformation,
 		const SIZE_T nProcessInformationLength
 	) = 0;
+	virtual const ACCESS_MASK QueryAccessMask( ) = 0;
 
 	virtual std::shared_ptr< IProcessMemory >& GetMemory( ) = 0;
 };

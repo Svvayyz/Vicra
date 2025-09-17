@@ -24,7 +24,7 @@
     <ClCompile Include="Common\Process.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Detections\Other.cpp">
+    <ClCompile Include="Detections\Policies.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Detections\Objects.cpp">
@@ -59,7 +59,7 @@
     <ClInclude Include="Common\Process.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Detections\Other.h">
+    <ClInclude Include="Detections\Policies.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Detections\Objects.h">

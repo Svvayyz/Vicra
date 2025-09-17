@@ -42,6 +42,7 @@ public:
 		const PVOID pProcessInformation,
 		const SIZE_T nProcessInformationLength
 	) override;
+	const ACCESS_MASK QueryAccessMask( ) override;
 
 	std::shared_ptr< IProcessMemory >& GetMemory( ) override { return m_Memory; }
 

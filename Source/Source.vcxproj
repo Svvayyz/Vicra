@@ -122,7 +122,7 @@
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
-      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <GenerateDebugInformation>false</GenerateDebugInformation>
       <AdditionalDependencies>ntdll.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <UACExecutionLevel>RequireAdministrator</UACExecutionLevel>
     </Link>
@@ -159,7 +159,7 @@
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
-      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <GenerateDebugInformation>false</GenerateDebugInformation>
       <AdditionalDependencies>ntdll.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <UACExecutionLevel>RequireAdministrator</UACExecutionLevel>
     </Link>
@@ -169,7 +169,7 @@
     <ClCompile Include="Detections\Callbacks.cpp" />
     <ClCompile Include="Detections\Objects.cpp" />
     <ClCompile Include="Detections\Memory.cpp" />
-    <ClCompile Include="Detections\Other.cpp" />
+    <ClCompile Include="Detections\Policies.cpp" />
     <ClCompile Include="Main.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -177,7 +177,7 @@
     <ClInclude Include="Detections\Callbacks.h" />
     <ClInclude Include="Detections\Objects.h" />
     <ClInclude Include="Detections\Memory.h" />
-    <ClInclude Include="Detections\Other.h" />
+    <ClInclude Include="Detections\Policies.h" />
     <ClInclude Include="Header.h" />
     <ClInclude Include="Includes.h" />
     <ClInclude Include="Interfaces\IPlugin.h" />

@@ -3,10 +3,6 @@
 namespace Vicra {
 void MemoryDetection::Run( const std::shared_ptr< IProcess >& Process ) {
 	VM_COUNTERS vmc { };
-	PROCESS_BASIC_INFORMATION pbi { };
-
-	PEB peb {};
-
 	if ( Process->Query( 
 		ProcessVmCounters, 
 		
@@ -14,27 +10,12 @@ void MemoryDetection::Run( const std::shared_ptr< IProcess >& Process ) {
 		sizeof( VM_COUNTERS ) 
 	) && vmc.PagefileUsage > vmc.WorkingSetSize )
 		m_ReportData.Populate( ReportValue {
+			"Possible niche anti-memory inspection technique detected",
 			"vmc.PagefileUsage > vmc.WorkingSetSize",
 			"https://secret.club/2021/05/23/big-memory.html",
 
-			EReportSeverity::CRITICAL,
-			EReportFlags::AVOID_VM_QUERY
+			EReportSeverity::Critical,
+			EReportFlags::AvoidVMQuerying
 		} );
-
-	if ( !Process->Query(
-		ProcessBasicInformation,
-
-		&pbi,
-		sizeof( PROCESS_BASIC_INFORMATION )
-	) ) return;
-
-	auto& Memory = Process->GetMemory( );
-
-	if ( Memory->Read(
-		pbi.PebBaseAddress,
-
-		&peb,
-		sizeof( PEB )
-	) ) return;
 }
 }
