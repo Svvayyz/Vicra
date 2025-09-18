@@ -7,6 +7,12 @@ typedef struct _LDR_DLL_NOTIFICATION_ENTRY {
 	PVOID                          Context;
 } LDR_DLL_NOTIFICATION_ENTRY, * PLDR_DLL_NOTIFICATION_ENTRY;
 
+typedef struct _VECTXCPT_CALLOUT_ENTRY {
+	LIST_ENTRY Links;
+	PVOID reserved[ 2 ];
+	PVECTORED_EXCEPTION_HANDLER VectoredHandler;
+} VECTXCPT_CALLOUT_ENTRY, * PVECTXCPT_CALLOUT_ENTRY;
+
 namespace Vicra {
 void CallbackDetection::Run( const std::shared_ptr< IProcess >& Process ) {
 	PROCESS_INSTRUMENTATION_CALLBACK_INFORMATION pici { };
@@ -24,6 +30,8 @@ void CallbackDetection::Run( const std::shared_ptr< IProcess >& Process ) {
 			EReportSeverity::Severe,
 			EReportFlags::AvoidCodeInjection
 		} );
+
+	// RtlAddVectoredExceptionHandler( );
 
 	auto& Memory = Process->GetMemory( );
 
@@ -53,6 +61,8 @@ void CallbackDetection::Run( const std::shared_ptr< IProcess >& Process ) {
 			sizeof( LDR_DLL_NOTIFICATION_ENTRY )
 		);
 
+		pLdrUnregisterDllNotification( Cookie );
+
 		if ( Head != Entry.List.Flink || Head != Entry.List.Blink ) 
 			m_ReportData.Populate( ReportValue {
 				"LdrDllNotificationList isn't empty.....",
@@ -62,8 +72,6 @@ void CallbackDetection::Run( const std::shared_ptr< IProcess >& Process ) {
 				EReportSeverity::Severe,
 				EReportFlags::AvoidCodeInjection
 			} );
-
-		pLdrUnregisterDllNotification( Cookie );
 	}
 
 	// FiveM's anti-cheat adhesive used to place "call traps" on certain functions using intel's ice2 instr
@@ -72,23 +80,14 @@ void CallbackDetection::Run( const std::shared_ptr< IProcess >& Process ) {
 	// afaik nowadays it only uses it for catching primitive pattern scanners that try to read PAGE_GUARD memory
 	// and also software breakpoint detection
 	
-	PROCESS_BASIC_INFORMATION pbi { };
-	if ( !Process->Query(
-		ProcessBasicInformation,
+	auto v = ( PVECTXCPT_CALLOUT_ENTRY )RtlAddVectoredExceptionHandler(
+		FALSE,
+		DummyVEHCallback
+	);
 
-		&pbi,
-		sizeof( PROCESS_BASIC_INFORMATION )
-	) ) return;
+	std::cout << (PVOID)v->VectoredHandler == (PVOID)DummyVEHCallback;
 
-	PEB peb {};
-	if ( !Memory->Read(
-		pbi.PebBaseAddress,
-
-		&peb,
-		sizeof( PEB )
-	) ) return;
-
-	if ( peb.ProcessUsingVEH )
+	if ( Process->ExecutableBlock.ProcessUsingVEH )
 		m_ReportData.Populate( ReportValue {
 			"VectoredExceptionHandlerList isn't empty....",
 			"peb.ProcessUsingVEH",

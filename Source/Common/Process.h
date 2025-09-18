@@ -13,6 +13,15 @@ public:
 		const SIZE_T nBytesToRead
 	) override;
 
+	const BOOL Query(
+		const PVOID pAddress,
+
+		const MEMORY_INFORMATION_CLASS Class,
+
+		const PVOID pBuffer,
+		const SIZE_T nBytesToRead
+	) override;
+
 private:
 	const HANDLE& m_Handle;
 };
@@ -24,6 +33,8 @@ public:
 	}
 
 public:
+	void Setup( ) override;
+
 	const BOOL Attach( 
 		const DWORD ProcessId, 
 
@@ -34,6 +45,7 @@ public:
 
 		const ACCESS_MASK DesiredAccess = PROCESS_QUERY_LIMITED_INFORMATION
 	) override;
+	const BOOL AttachMaxPrivileges( const std::wstring& ProcessName ) override;
 	const BOOL Close( ) override;
 
 	const BOOL Query(

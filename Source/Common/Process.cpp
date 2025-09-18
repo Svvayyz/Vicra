@@ -20,6 +20,43 @@ const BOOL ProcessMemory::Read(
 
 	return nBytesRead;
 }
+const BOOL ProcessMemory::Query(
+	const PVOID pAddress,
+
+	const MEMORY_INFORMATION_CLASS Class,
+
+	const PVOID pBuffer,
+	const SIZE_T nBytesToRead
+) {
+	return NT_SUCCESS( NtQueryVirtualMemory(
+		m_Handle,
+
+		pAddress,
+		Class,
+
+		pBuffer,
+		nBytesToRead,
+
+		NULL
+	) );
+}
+
+void Process::Setup( ) {
+	PROCESS_BASIC_INFORMATION pbi { };
+	if ( !this->Query(
+		ProcessBasicInformation,
+
+		&pbi,
+		sizeof( PROCESS_BASIC_INFORMATION )
+	) ) return;
+
+	m_Memory->Read(
+		pbi.PebBaseAddress,
+
+		&ExecutableBlock,
+		sizeof( PEB )
+	);
+}
 
 const BOOL Process::Attach(
 	const DWORD ProcessId,
@@ -65,6 +102,14 @@ const BOOL Process::AttachByName(
 	} while ( Process32Next( hSnapshot, &Entry ) );
 
 	return this->Attach( Entry.th32ProcessID, DesiredAccess );
+}
+const BOOL Process::AttachMaxPrivileges( const std::wstring& ProcessName ) {
+	if ( !AttachByName( ProcessName, READ_CONTROL ) ) return FALSE;
+
+	auto AccessMask = QueryAccessMask( );
+	if ( AccessMask == 0 ) AccessMask = REQUIRED_MASK;
+
+	return AttachByName( ProcessName, AccessMask );
 }
 const BOOL Process::Close( ) {
 	if ( m_Handle == INVALID_HANDLE_VALUE ) return TRUE;

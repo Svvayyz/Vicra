@@ -7,6 +7,10 @@ private:
 	{
 		return;
 	}
+	static LONG CALLBACK DummyVEHCallback( PEXCEPTION_POINTERS ExceptionInfo ) {
+		return NULL;
+	}
+;
 
 public:
 	VOID Run( const std::shared_ptr< IProcess >& Process ) override;

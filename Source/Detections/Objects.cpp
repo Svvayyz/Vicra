@@ -2,24 +2,7 @@
 
 namespace Vicra {
 void ObjectDetection::Run( const std::shared_ptr< IProcess >& Process ) {
-	auto& Memory = Process->GetMemory( );
-
-	PROCESS_BASIC_INFORMATION pbi { };
-	if ( !Process->Query(
-		ProcessBasicInformation,
-
-		&pbi,
-		sizeof( PROCESS_BASIC_INFORMATION )
-	) ) return;
-
-	PEB peb {};
-	if ( !Memory->Read(
-		pbi.PebBaseAddress,
-
-		&peb,
-		sizeof( PEB )
-	) ) return;
-	if ( !peb.ProcessInJob ) return;
+	if ( !Process->ExecutableBlock.ProcessInJob ) return;
 
 	std::cout << "ProcessIsInJob" << '\n';
 
