@@ -3,7 +3,7 @@
 namespace Vicra {
 class ObjectDetection : public IPlugin {
 private:
-	using HandlerFunction = std::function< void( std::wstring&, HANDLE&, SYSTEM_HANDLE_TABLE_ENTRY_INFO_EX& ) >;
+	using HandlerFunction = std::function< void( const std::wstring&, const HANDLE&, const SYSTEM_HANDLE_TABLE_ENTRY_INFO_EX& ) >;
 
 private:
 	std::vector< BYTE > m_DataBuffer {};

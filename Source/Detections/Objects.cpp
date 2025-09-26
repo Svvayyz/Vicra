@@ -56,7 +56,7 @@ void ObjectDetection::Run( const std::shared_ptr< IProcess >& Process ) {
 		sizeof( PROCESS_BASIC_INFORMATION )
 	) ) return;
 
-ForEachHandle( [ & ] ( std::wstring& TypeName, HANDLE& Handle, SYSTEM_HANDLE_TABLE_ENTRY_INFO_EX& HandleInfo ) {
+ForEachHandle( [ & ] ( const std::wstring& TypeName, const HANDLE& Handle, const SYSTEM_HANDLE_TABLE_ENTRY_INFO_EX& HandleInfo ) {
 	// #peb.ProcessInJob can easily be changed
 	if ( TypeName == L"Job" && Process->IsProcessInJob( Handle ) ) {
 		JOBOBJECT_EXTENDED_LIMIT_INFORMATION jeli {};
