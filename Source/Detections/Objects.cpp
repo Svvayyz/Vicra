@@ -1,32 +1,101 @@
 #include "../Header.h"
 
 namespace Vicra {
+void ObjectDetection::ForEachHandle( HandlerFunction Handler ) {
+	auto shi = Query< PSYSTEM_HANDLE_INFORMATION_EX >(
+		SystemExtendedHandleInformation
+	);
+
+	for ( int i = 0; i < shi->NumberOfHandles; i++ ) {
+		auto& HandleInfo = shi->Handles[ i ];
+
+		auto SourceProcess = std::make_unique< Process >( );
+		if ( !SourceProcess->Attach(
+			( DWORD )HandleInfo.UniqueProcessId,
+			PROCESS_DUP_HANDLE
+		) ) continue;
+
+		HANDLE DuplicatedHandle =
+			SourceProcess->DuplicateHandle( HandleInfo.HandleValue );
+
+		SourceProcess->Close( );
+		if ( DuplicatedHandle == INVALID_HANDLE_VALUE ) continue;
+
+		/*
+			Create name mapping
+		*/
+		if ( m_NameMappings.find( HandleInfo.ObjectTypeIndex ) == m_NameMappings.end( ) ) {
+			auto Info = QueryObject< POBJECT_TYPE_INFORMATION >( ObjectTypeInformation, DuplicatedHandle );
+			if ( !Info ) continue;
+
+			m_NameMappings.insert( {
+				HandleInfo.ObjectTypeIndex,
+				{
+					Info->TypeName.Buffer,
+					Info->TypeName.Length / sizeof( WCHAR )
+				}
+			} );
+		}
+
+		Handler(
+			m_NameMappings[ HandleInfo.ObjectTypeIndex ],
+
+			DuplicatedHandle,
+			HandleInfo
+		);
+
+		NtClose( DuplicatedHandle );
+	}
+}
+
 void ObjectDetection::Run( const std::shared_ptr< IProcess >& Process ) {
-	if ( !Process->ExecutableBlock.ProcessInJob ) return;
-
-	std::cout << "ProcessIsInJob" << '\n';
-
-	PROCESS_HANDLE_SNAPSHOT_INFORMATION phsi {};
+	PROCESS_BASIC_INFORMATION pbi { };
 	if ( !Process->Query(
-		ProcessHandleInformation,
-
-		&phsi,
-		sizeof( phsi )
+		ProcessBasicInformation,
+		&pbi,
+		sizeof( PROCESS_BASIC_INFORMATION )
 	) ) return;
 
-	// TODO: iterate through all handles, check if their type == JobType, then check the properties of it....
+ForEachHandle( [ & ] ( std::wstring& TypeName, HANDLE& Handle, SYSTEM_HANDLE_TABLE_ENTRY_INFO_EX& HandleInfo ) {
+	// #peb.ProcessInJob can easily be changed
+	if ( TypeName == L"Job" && Process->IsProcessInJob( Handle ) ) {
+		JOBOBJECT_EXTENDED_LIMIT_INFORMATION jeli {};
+		if ( !NT_SUCCESS( NtQueryInformationJobObject(
+			Handle,
+			( JOBOBJECTINFOCLASS )JobObjectExtendedLimitInformation,
+			&jeli, sizeof( jeli ),
+			NULL
+		) ) ) 
+			return;
 
-	/*HANDLE job = nullptr;
-	NtCreateJobObject( &job, MAXIMUM_ALLOWED, nullptr );
+		if ( jeli.BasicLimitInformation.LimitFlags == JOB_OBJECT_LIMIT_PROCESS_MEMORY )
+			m_ReportData.Populate( ReportValue {
+				"Possible niche anti-code injection technique detected ( jeli.BasicLimitInformation.LimitFlags == JOB_OBJECT_LIMIT_PROCESS_MEMORY )",
 
-	NtAssignProcessToJobObject( job, NtCurrentProcess( ) );
+				EReportSeverity::Critical,
+				EReportFlags::AvoidCodeInjection
+			} );
+	}
 
-	JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits;
-	limits.ProcessMemoryLimit = 0x1000;
-	limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_PROCESS_MEMORY;
-	NtSetInformationJobObject( job, JobObjectExtendedLimitInformation,
-		&limits, sizeof( limits ) );*/
+	if ( TypeName == L"Section" && HandleInfo.UniqueProcessId == pbi.UniqueProcessId ) {
+		SECTION_BASIC_INFORMATION sbi {};
+		if ( !NT_SUCCESS( NtQuerySection(
+			Handle,
+			SectionBasicInformation,
 
-	// https://secret.club/2021/01/20/diet-process.html
+			&sbi, sizeof( sbi ),
+			NULL
+		) ) )
+			return;
+
+		if ( sbi.MaximumSize.QuadPart > 268435456LL )
+			m_ReportData.Populate( ReportValue {
+				"Possible niche anti-memory inspection technique detected ( sbi.MaximumSize.QuadPart > 256MB )",
+
+				EReportSeverity::Critical,
+				EReportFlags::AvoidVMQuerying
+			} );
+	}
+} );
 }
 }

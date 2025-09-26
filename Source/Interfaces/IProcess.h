@@ -18,6 +18,10 @@ public:
 		const PVOID pBuffer,
 		const SIZE_T nBytesToRead
 	) = 0;
+
+	virtual const std::string ToString(
+		const PVOID pAddress
+	) = 0;
 };
 
 class IProcess {
@@ -44,6 +48,13 @@ public:
 	virtual std::shared_ptr< IProcessMemory >& GetMemory( ) = 0;
 
 public:
-	PEB ExecutableBlock;
+	virtual const PVOID DecodePointer( const PVOID Pointer ) = 0;
+
+public:
+	virtual const HANDLE DuplicateHandle( const HANDLE& Value ) = 0;
+	virtual const BOOL IsProcessInJob( const HANDLE& Job ) = 0;
+
+public:
+	ULONG Cookie;
 };
 }

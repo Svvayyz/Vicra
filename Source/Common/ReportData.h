@@ -19,17 +19,13 @@ class ReportValue {
 public:
 	ReportValue(
 		const std::string& Message,
-		const std::string& Reason,
-		const std::string& URL,
 
 		const EReportSeverity Severity = EReportSeverity::Information,
 		const EReportFlags Flags = EReportFlags::None
-	) : Message( Message ), Reason( Reason ), URL( URL ), Severity( Severity ), Flags( Flags ) { };
+	) : Message( Message ), Severity( Severity ), Flags( Flags ) { };
 
 public:
 	const std::string Message;
-	const std::string Reason;
-	const std::string URL;
 
 	const EReportFlags Flags;
 	const EReportSeverity Severity;
@@ -45,13 +41,10 @@ public:
 	}
 	const std::string Format( ) const {
 		return std::format( 
-			"{}{} ( Reason: {}, Method: {} )",   
+			"{}{}",   
 
 			FormatSeverity( ),
-			Message,
-
-			Reason,
-			URL
+			Message
 		);
 	}
 };
@@ -65,7 +58,7 @@ public:
 	const void Populate( const ReportValue ReportValue ) { m_Values.emplace_back( ReportValue ); }
 
 	const BOOL HasAnyReports( ) const {
-		return m_Values.size( ) > 0;
+		return !m_Values.empty( );
 	}
 };
 }

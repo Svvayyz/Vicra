@@ -13,3 +13,4 @@
 
 #include <format>
 #include <TlHelp32.h>
+#include <sstream>

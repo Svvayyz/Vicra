@@ -41,6 +41,37 @@ const BOOL ProcessMemory::Query(
 	) );
 }
 
+const std::string ProcessMemory::ToString(
+	const PVOID pAddress
+) {
+	std::stringstream Stream;
+	Stream << "0x" << std::hex << reinterpret_cast< uintptr_t >( pAddress );
+
+	char Buffer[ 0x1000 ];
+	if ( !Query(
+		pAddress,
+
+		MemoryMappedFilenameInformation,
+		Buffer,
+		sizeof( Buffer )
+	) ) {
+		Stream << " @ ??";
+
+		return Stream.str( );
+	}
+		
+	auto Unicode = reinterpret_cast< PUNICODE_STRING >( Buffer );
+
+	std::wstring Path( Unicode->Buffer, Unicode->Length / sizeof( WCHAR ) );
+	std::wstring wFileName = Path.substr( Path.find_last_of( L"\\/" ) + 1 );
+
+	std::string FileName( wFileName.begin( ), wFileName.end( ) );
+
+	Stream << " @ " << FileName;
+
+	return Stream.str( );
+}
+
 void Process::Setup( ) {
 	PROCESS_BASIC_INFORMATION pbi { };
 	if ( !this->Query(
@@ -50,11 +81,10 @@ void Process::Setup( ) {
 		sizeof( PROCESS_BASIC_INFORMATION )
 	) ) return;
 
-	m_Memory->Read(
-		pbi.PebBaseAddress,
-
-		&ExecutableBlock,
-		sizeof( PEB )
+	this->Query(
+		ProcessCookie,
+		&Cookie,
+		sizeof( ULONG )
 	);
 }
 
@@ -98,16 +128,18 @@ const BOOL Process::AttachByName(
 
 	do {
 		if ( wcscmp( Entry.szExeFile, ProcessName.c_str( ) ) == 0 )
-			break;
+			return this->Attach( Entry.th32ProcessID, DesiredAccess );
 	} while ( Process32Next( hSnapshot, &Entry ) );
 
-	return this->Attach( Entry.th32ProcessID, DesiredAccess );
+	return FALSE;
 }
 const BOOL Process::AttachMaxPrivileges( const std::wstring& ProcessName ) {
-	if ( !AttachByName( ProcessName, READ_CONTROL ) ) return FALSE;
+	ACCESS_MASK AccessMask = PROCESS_QUERY_LIMITED_INFORMATION;
 
-	auto AccessMask = QueryAccessMask( );
-	if ( AccessMask == 0 ) AccessMask = REQUIRED_MASK;
+	if ( AttachByName( ProcessName, READ_CONTROL ) ) {
+		AccessMask = QueryAccessMask( );
+		if ( AccessMask == 0 ) AccessMask = REQUIRED_MASK;
+	}
 
 	return AttachByName( ProcessName, AccessMask );
 }
@@ -247,5 +279,56 @@ const ACCESS_MASK Process::QueryAccessMask( ) {
 	std::free( pUserSID );
 
 	return AccessMask;
+}
+
+const PVOID Process::DecodePointer( const PVOID Pointer ) {
+	const auto ROL8 = [ ] ( auto value, auto count ) {
+		count &= 63;
+		return ( value << count ) | ( value >> ( 64 - count ) );
+	};
+
+	/*
+		__int64 __fastcall RtlDecodePointer(__int64 Pointer)
+		{
+		  unsigned int Cookie; // edx
+		  int NtStatus; // eax
+		  unsigned int ProcessCookieBuf; // [rsp+48h] [rbp+10h] BYREF
+
+		  Cookie = g_ProcessCookie;
+		  ProcessCookieBuf = 0;
+		  if ( !g_ProcessCookie )
+		  {
+			NtStatus = ZwQueryInformationProcess(-1i64, 36i64, &ProcessCookieBuf);
+			if ( NtStatus < 0 )
+			  RtlRaiseStatus((unsigned int)NtStatus);
+			Cookie = ProcessCookieBuf;
+			g_ProcessCookie = ProcessCookieBuf;
+		  }
+		  return __ROR8__(Pointer, 64 - (Cookie & 0x3F)) ^ Cookie;
+		}
+	*/
+
+	return ( PVOID )( ROL8( ( ULONGLONG ) Pointer, Cookie & 0x3F ) ^ Cookie );
+}
+
+const HANDLE Process::DuplicateHandle( const HANDLE& Value ) {
+	HANDLE DuplicatedHandle {};
+	if ( !NT_SUCCESS( NtDuplicateObject(
+		m_Handle,
+		Value,
+		NtCurrentProcess( ),
+		&DuplicatedHandle,
+		NULL,
+		NULL,
+		DUPLICATE_SAME_ACCESS
+	) ) ) return INVALID_HANDLE_VALUE;
+
+	return DuplicatedHandle;
+}
+const BOOL Process::IsProcessInJob( const HANDLE& Job ) {
+	return NT_SUCCESS( NtIsProcessInJob(
+		m_Handle,
+		Job
+	) );
 }
 }

@@ -12,7 +12,6 @@ public:
 			Plugin->Run( Process );
 
 			auto& ReportData = Plugin->GetReportData( );
-
 			if ( !ReportData.HasAnyReports( ) ) continue;
 
 			auto& Values = ReportData.GetValues( );

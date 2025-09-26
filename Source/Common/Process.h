@@ -1,7 +1,7 @@
 #pragma once
 
 namespace Vicra {
-class ProcessMemory : public IProcessMemory {
+class ProcessMemory final : public IProcessMemory {
 public:
 	ProcessMemory( const HANDLE& Handle ) : m_Handle( Handle ) { };
 
@@ -22,11 +22,15 @@ public:
 		const SIZE_T nBytesToRead
 	) override;
 
+	const std::string ToString(
+		const PVOID pAddress
+	) override;
+
 private:
 	const HANDLE& m_Handle;
 };
 
-class Process : public IProcess {
+class Process final : public IProcess {
 public:
 	Process( ) {
 		m_Memory = std::make_shared< ProcessMemory >( m_Handle );
@@ -57,6 +61,13 @@ public:
 	const ACCESS_MASK QueryAccessMask( ) override;
 
 	std::shared_ptr< IProcessMemory >& GetMemory( ) override { return m_Memory; }
+
+public:
+	const PVOID DecodePointer( const PVOID Pointer ) override;
+
+public:
+	const HANDLE DuplicateHandle( const HANDLE& Value ) override;
+	const BOOL IsProcessInJob( const HANDLE& Job ) override;
 
 private:
 	HANDLE m_Handle = INVALID_HANDLE_VALUE;

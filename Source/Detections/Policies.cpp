@@ -10,9 +10,7 @@ void PolicyDetection::Run( const std::shared_ptr< IProcess >& Process ) {
 		sizeof( PS_PROTECTION )
 	) && pp.Level != PsProtectedTypeNone ) 
 		m_ReportData.Populate( ReportValue {
-			"Process protection detected",
-			"pp.Level != PsProtectedTypeNone",
-			"https://medium.com/@boutnaru/the-windows-security-journey-ppl-protected-processes-light-831d5f371004",
+			"Process protection detected (pp.Level != PsProtectedTypeNone)",
 
 			EReportSeverity::Information
 		} );
@@ -27,9 +25,7 @@ void PolicyDetection::Run( const std::shared_ptr< IProcess >& Process ) {
 		sizeof( PROCESS_MITIGATION_POLICY_INFORMATION )
 	) && ( ppi.SignaturePolicy.StoreSignedOnly || ppi.SignaturePolicy.MicrosoftSignedOnly ) ) 
 		m_ReportData.Populate( ReportValue {
-			"Loader image signature enforcement detected",
-			"ppi.SignaturePolicy.StoreSignedOnly || ppi.SignaturePolicy.MicrosoftSignedOnly",
-			"https://infosecwriteups.com/securing-your-malware-from-being-hooked-a995f25531f7",
+			"Loader image signature enforcement detected (ppi.SignaturePolicy.StoreSignedOnly || ppi.SignaturePolicy.MicrosoftSignedOnly)",
 
 			EReportSeverity::Information, EReportFlags::AvoidCodeInjection
 		} );	
@@ -45,9 +41,7 @@ void PolicyDetection::Run( const std::shared_ptr< IProcess >& Process ) {
 		ppi.UserShadowStackPolicy.EnableUserShadowStack || ppi.UserShadowStackPolicy.EnableUserShadowStackStrictMode
 	) ) 
 		m_ReportData.Populate( ReportValue {
-			"Possible stack-walking detected",
-			"ppi.UserShadowStackPolicy.EnableUserShadowStack || ppi.UserShadowStackPolicy.EnableUserShadowStackStrictMode",
-			"https://dtsec.us/2023-09-15-StackSpoofin/",
+			"Possible stack-walking detected (ppi.UserShadowStackPolicy.EnableUserShadowStack || ppi.UserShadowStackPolicy.EnableUserShadowStackStrictMode)",
 
 			EReportSeverity::Severe, EReportFlags::AvoidCodeInjection
 		} );
@@ -61,12 +55,9 @@ void PolicyDetection::Run( const std::shared_ptr< IProcess >& Process ) {
 		sizeof( PROCESS_MITIGATION_POLICY_INFORMATION )
 	) && ppi.DynamicCodePolicy.ProhibitDynamicCode ) 
 		m_ReportData.Populate( ReportValue {
-			"Executable memory allocation prevention detected",
-			"ppi.DynamicCodePolicy.ProhibitDynamicCode",
-			"https://www.ired.team/offensive-security/defense-evasion/acg-arbitrary-code-guard-processdynamiccodepolicy",
+			"Executable memory allocation prevention detected (ppi.DynamicCodePolicy.ProhibitDynamicCode)",
 
 			EReportSeverity::Information, EReportFlags::AvoidCodeInjection
 		} );
-	
 }
 }
