@@ -48,7 +48,7 @@ void ObjectDetection::ForEachHandle( HandlerFunction Handler ) {
 	}
 }
 
-void ObjectDetection::Run( const std::shared_ptr< IProcess >& Process ) {
+void ObjectDetection::Run( const std::shared_ptr< IProcess >& Process, const USHORT& Verdict ) {
 	PROCESS_BASIC_INFORMATION pbi { };
 	if ( !Process->Query(
 		ProcessBasicInformation,
@@ -56,8 +56,9 @@ void ObjectDetection::Run( const std::shared_ptr< IProcess >& Process ) {
 		sizeof( PROCESS_BASIC_INFORMATION )
 	) ) return;
 
+	std::unordered_set< std::string > AlreadySeenDevices {};
+
 ForEachHandle( [ & ] ( const std::wstring& TypeName, const HANDLE& Handle, const SYSTEM_HANDLE_TABLE_ENTRY_INFO_EX& HandleInfo ) {
-	// #peb.ProcessInJob can easily be changed
 	if ( TypeName == L"Job" && Process->IsProcessInJob( Handle ) ) {
 		JOBOBJECT_EXTENDED_LIMIT_INFORMATION jeli {};
 		if ( !NT_SUCCESS( NtQueryInformationJobObject(
@@ -95,6 +96,45 @@ ForEachHandle( [ & ] ( const std::wstring& TypeName, const HANDLE& Handle, const
 				EReportSeverity::Critical,
 				EReportFlags::AvoidVMQuerying
 			} );
+	}
+
+	if ( TypeName == L"File" && HandleInfo.UniqueProcessId == pbi.UniqueProcessId ) {
+		IO_STATUS_BLOCK iosb {};
+		FILE_FS_DEVICE_INFORMATION ffdi {};
+
+		if ( !NT_SUCCESS( NtQueryVolumeInformationFile(
+			Handle,
+
+			&iosb,
+			&ffdi, sizeof( ffdi ),
+			FileFsDeviceInformation
+		) ) )
+			return;
+
+		if ( ffdi.DeviceType != FILE_DEVICE_UNKNOWN )
+			return;
+
+		/*
+			Filtering idea: Priority
+		*/
+
+		auto Buffer = QueryObject< POBJECT_NAME_INFORMATION >(
+			ObjectNameInformation,
+			Handle
+		);
+		if ( !Buffer ) return;
+
+		std::string NameString = UnicodeToString( Buffer->Name );
+		if ( AlreadySeenDevices.count( NameString ) )
+			return;
+
+		AlreadySeenDevices.insert( NameString );
+
+		m_ReportData.Populate( ReportValue {
+			std::format( "Device: {}", NameString ),
+
+			EReportSeverity::Information
+		} );
 	}
 } );
 }

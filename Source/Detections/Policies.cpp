@@ -1,7 +1,7 @@
 #include "../Header.h"
 
 namespace Vicra {
-void PolicyDetection::Run( const std::shared_ptr< IProcess >& Process ) {
+void PolicyDetection::Run( const std::shared_ptr< IProcess >& Process, const USHORT& Verdict ) {
 	PS_PROTECTION pp {};
 	if ( Process->Query(
 		ProcessProtectionInformation,
@@ -27,9 +27,10 @@ void PolicyDetection::Run( const std::shared_ptr< IProcess >& Process ) {
 		m_ReportData.Populate( ReportValue {
 			"Loader image signature enforcement detected (ppi.SignaturePolicy.StoreSignedOnly || ppi.SignaturePolicy.MicrosoftSignedOnly)",
 
-			EReportSeverity::Information, EReportFlags::AvoidCodeInjection
-		} );	
-
+			EReportSeverity::Information,
+			EReportFlags::AvoidCodeInjection
+		} );
+		
 	ppi.Policy = ProcessUserShadowStackPolicy;
 		
 	if ( Process->Query(
@@ -37,13 +38,14 @@ void PolicyDetection::Run( const std::shared_ptr< IProcess >& Process ) {
 
 		&ppi,
 		sizeof( PROCESS_MITIGATION_POLICY_INFORMATION )
-	) && ( 
+	) && (
 		ppi.UserShadowStackPolicy.EnableUserShadowStack || ppi.UserShadowStackPolicy.EnableUserShadowStackStrictMode
 	) ) 
 		m_ReportData.Populate( ReportValue {
 			"Possible stack-walking detected (ppi.UserShadowStackPolicy.EnableUserShadowStack || ppi.UserShadowStackPolicy.EnableUserShadowStackStrictMode)",
 
-			EReportSeverity::Severe, EReportFlags::AvoidCodeInjection
+			EReportSeverity::Severe,
+			EReportFlags::AvoidCodeInjection
 		} );
 
 	ppi.Policy = ProcessDynamicCodePolicy;
@@ -57,7 +59,8 @@ void PolicyDetection::Run( const std::shared_ptr< IProcess >& Process ) {
 		m_ReportData.Populate( ReportValue {
 			"Executable memory allocation prevention detected (ppi.DynamicCodePolicy.ProhibitDynamicCode)",
 
-			EReportSeverity::Information, EReportFlags::AvoidCodeInjection
+			EReportSeverity::Information,
+			EReportFlags::AvoidCodeInjection
 		} );
 }
 }

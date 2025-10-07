@@ -22,7 +22,7 @@ public:
 
 		const EReportSeverity Severity = EReportSeverity::Information,
 		const EReportFlags Flags = EReportFlags::None
-	) : Message( Message ), Severity( Severity ), Flags( Flags ) { };
+	) : Message( Message ), Flags( Flags ), Severity( Severity ) { };
 
 public:
 	const std::string Message;

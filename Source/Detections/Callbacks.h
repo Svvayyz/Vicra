@@ -19,10 +19,10 @@ private:
 	VOID NtDllResolver( );
 
 private:
-	PVOID m_LdrpDllNotificationList;
-	PVOID m_LdrpVectorHandlerList;
+	PVOID m_LdrpDllNotificationList = NULL;
+	PVOID m_LdrpVectorHandlerList = NULL;
 
 public:
-	VOID Run( const std::shared_ptr< IProcess >& Process ) override;
+	VOID Run( const std::shared_ptr< IProcess >& Process, const USHORT& Verdict ) override;
 };
 }

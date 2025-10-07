@@ -10,6 +10,7 @@
 
 #include <optional>
 #include <iostream>
+#include <unordered_set>
 
 #include <format>
 #include <TlHelp32.h>

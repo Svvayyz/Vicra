@@ -46,7 +46,7 @@ private:
 		ULONG ReturnLength = 0;
 		NtQueryObject(
 			Object,
-			ObjectTypeInformation,
+			Class,
 			NULL, NULL,
 			&ReturnLength
 		);
@@ -56,7 +56,7 @@ private:
 		if ( !NT_SUCCESS(
 			NtQueryObject(
 				Object,
-				ObjectTypeInformation,
+				Class,
 				m_ObjectDataBuffer.data( ),
 				ReturnLength,
 				nullptr
@@ -66,10 +66,29 @@ private:
 		return reinterpret_cast< T >( m_ObjectDataBuffer.data( ) );
 	}
 
+	std::string UnicodeToString( const UNICODE_STRING& Unicode ) {
+		int Size = WideCharToMultiByte(
+			CP_UTF8, NULL,
+			Unicode.Buffer,
+			Unicode.Length / sizeof( WCHAR ),
+			NULL, NULL, NULL, NULL
+		);
+
+		std::string String( Size, 0 );
+		WideCharToMultiByte(
+			CP_UTF8, NULL,
+			Unicode.Buffer,
+			Unicode.Length / sizeof( WCHAR ),
+			String.data( ), Size, NULL, NULL
+		);
+
+		return String;
+	}
+
 private:
 	void ForEachHandle( HandlerFunction Handler );
 
 public:
-	void Run( const std::shared_ptr< IProcess >& Process ) override;
+	void Run( const std::shared_ptr< IProcess >& Process, const USHORT& Verdict ) override;
 };
 }

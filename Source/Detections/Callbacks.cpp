@@ -39,11 +39,7 @@ void CallbackDetection::NtDllResolver( ) {
 		}
 
 		return Next;
-		};
-
-	/*
-		TODO: Use LdrGetDllHandle, LdrGetProcedureAddress
-	*/
+	};
 
 	using LdrRegisterDllNotification_t = decltype( &LdrRegisterDllNotification );
 	using LdrUnregisterDllNotification_t = decltype( &LdrUnregisterDllNotification );
@@ -100,7 +96,7 @@ void CallbackDetection::NtDllResolver( ) {
 	RtlRemoveVectoredExceptionHandler( VehCookie );
 }
 
-void CallbackDetection::Run( const std::shared_ptr< IProcess >& Process ) {
+void CallbackDetection::Run( const std::shared_ptr< IProcess >& Process, const USHORT& Verdict ) {
 	auto& Memory = Process->GetMemory( );
 
 	PROCESS_INSTRUMENTATION_CALLBACK_INFORMATION pici { };
@@ -113,7 +109,7 @@ void CallbackDetection::Run( const std::shared_ptr< IProcess >& Process ) {
 		m_ReportData.Populate( ReportValue {
 			std::format( "Instrumentation callback @ {}", Memory->ToString( pici.Callback ) ),
 
-			EReportSeverity::Severe,
+			EReportSeverity::Severe, 
 			EReportFlags::AvoidCodeInjection
 		} );
 
@@ -136,7 +132,7 @@ void CallbackDetection::Run( const std::shared_ptr< IProcess >& Process ) {
 			m_ReportData.Populate( ReportValue {
 				"LdrDllNotificationList @ ntdll entry: " + Memory->ToString( Entry.Callback ),
 
-				EReportSeverity::Severe,
+				EReportSeverity::Severe, 
 				EReportFlags::AvoidCodeInjection
 			} );
 
@@ -167,6 +163,6 @@ void CallbackDetection::Run( const std::shared_ptr< IProcess >& Process ) {
 	}
 
 	// TODO: TLS Callbacks
-	// TODO: Window Callbacks (peb.KernelCallbackTable)
+	// TODO: Window Callbacks
 }
 }

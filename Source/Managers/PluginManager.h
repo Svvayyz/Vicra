@@ -8,8 +8,10 @@ private:
 public:
 	void RegisterPlugin( std::shared_ptr< IPlugin > Plugin ) { m_Plugins.emplace_back( Plugin ); }
 	void RunAll( std::shared_ptr< Process >& Process ) {
+		USHORT Verdict = 0;
+
 		for ( auto& Plugin : m_Plugins ) {
-			Plugin->Run( Process );
+			Plugin->Run( Process, Verdict );
 
 			auto& ReportData = Plugin->GetReportData( );
 			if ( !ReportData.HasAnyReports( ) ) continue;
@@ -18,6 +20,8 @@ public:
 
 			for ( auto& Value : Values ) {
 				std::cout << Value.Format( ) << '\n';
+
+				Verdict |= ( USHORT ) Value.Flags;
 			}
 		}
 	}

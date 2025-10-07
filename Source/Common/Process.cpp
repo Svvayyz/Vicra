@@ -87,6 +87,11 @@ void Process::Setup( ) {
 		sizeof( ULONG )
 	);
 }
+void Process::Close( ) {
+	if ( m_Handle == INVALID_HANDLE_VALUE ) return;
+
+	NtClose( m_Handle );
+}
 
 const BOOL Process::Attach(
 	const DWORD ProcessId,
@@ -113,7 +118,7 @@ const BOOL Process::AttachByName(
 
 	const ACCESS_MASK DesiredAccess
 ) {
-	// convert this to syscalls (NtQuerySystemInformation)
+	// TODO: convert this to syscalls (NtQuerySystemInformation)
 
 	HANDLE hSnapshot = CreateToolhelp32Snapshot( 
 		TH32CS_SNAPPROCESS,
@@ -142,11 +147,6 @@ const BOOL Process::AttachMaxPrivileges( const std::wstring& ProcessName ) {
 	}
 
 	return AttachByName( ProcessName, AccessMask );
-}
-const BOOL Process::Close( ) {
-	if ( m_Handle == INVALID_HANDLE_VALUE ) return TRUE;
-	
-	return NT_SUCCESS( NtClose( m_Handle ) );
 }
 
 const BOOL Process::Query(

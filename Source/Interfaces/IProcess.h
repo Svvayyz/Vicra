@@ -27,6 +27,7 @@ public:
 class IProcess {
 public:
 	virtual void Setup( ) = 0;
+	virtual void Close( ) = 0;
 
 	virtual const BOOL Attach( const DWORD ProcessId, const ACCESS_MASK DesiredAccess ) = 0;
 	virtual const BOOL AttachByName( 
@@ -35,7 +36,6 @@ public:
 		const ACCESS_MASK DesiredAccess 
 	) = 0;
 	virtual const BOOL AttachMaxPrivileges( const std::wstring& ProcessName ) = 0;
-	virtual const BOOL Close( ) = 0;
 
 	virtual const BOOL Query(
 		const PROCESSINFOCLASS Class,

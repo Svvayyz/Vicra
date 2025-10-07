@@ -38,6 +38,7 @@ public:
 
 public:
 	void Setup( ) override;
+	void Close( ) override;
 
 	const BOOL Attach( 
 		const DWORD ProcessId, 
@@ -50,7 +51,6 @@ public:
 		const ACCESS_MASK DesiredAccess = PROCESS_QUERY_LIMITED_INFORMATION
 	) override;
 	const BOOL AttachMaxPrivileges( const std::wstring& ProcessName ) override;
-	const BOOL Close( ) override;
 
 	const BOOL Query(
 		const PROCESSINFOCLASS Class,
