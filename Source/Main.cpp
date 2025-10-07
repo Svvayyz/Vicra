@@ -1,8 +1,6 @@
 #include "Header.h"
 
 int wmain( int argc, const wchar_t** argv ) {
-	argv[ 1 ] = L"Module-x64.exe";
-
 	auto Process = std::make_shared< Vicra::Process >( );
 	if ( !Process->AttachMaxPrivileges( argv[ 1 ] ) ) {
 		return 0;
