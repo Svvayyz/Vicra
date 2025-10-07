@@ -1,5 +1,7 @@
 #include "../Header.h"
 
+#include <hde64.h>
+
 namespace Vicra {
 void MemoryDetection::CreateSCNMappings( ) {
 	UNICODE_STRING NtDllName {};
@@ -60,15 +62,10 @@ void MemoryDetection::Run( const std::shared_ptr< IProcess >& Process, const USH
 	auto& Memory = Process->GetMemory( );
 	auto Buffer = std::vector< BYTE >( si.dwPageSize );
 
-	constexpr BYTE PatternData[ 10 ] = {
-		0x4C, 0x8B, 0xD1,			  // mov r10, rcx
-		0xB8, 0xCC, 0xCC, 0xCC, 0xCC, // mov eax, wildcard
-		0x0F, 0x05					  // syscall
-	};
-	constexpr SIZE_T SizeOfPattern = sizeof( PatternData );
-
 	while ( Current < Maximum )
 	{
+		SHORT SavedSystemCallNumber = 0;
+
 		if ( !Memory->Query(
 			Current,
 			MemoryBasicInformation,
@@ -79,7 +76,10 @@ void MemoryDetection::Run( const std::shared_ptr< IProcess >& Process, const USH
 			continue;
 		}
 
-		if ( mbi.State != MEM_COMMIT || mbi.Type != MEM_PRIVATE )
+		/*
+			Direct syscall stub's are usually pretty small... let's not process manually mapped code
+		*/
+		if ( mbi.State != MEM_COMMIT || mbi.Type != MEM_PRIVATE || mbi.RegionSize > si.dwPageSize * 10 )
 			goto Next;
 
 		if ( 
@@ -98,38 +98,37 @@ void MemoryDetection::Run( const std::shared_ptr< IProcess >& Process, const USH
 		) ) 
 			goto Next;
 
-		for ( int i = 0; i < Buffer.size( ) - SizeOfPattern; i++ )
-		{
-			bool Found = true;
-
-			for ( int j = 0; j < SizeOfPattern; j++ )
-			{
-				if ( PatternData[ j ] == 0xCC )
-					continue;
-
-				if ( PatternData[ j ] == Buffer.data( )[ i + j ] )
-					continue;
-
-				Found = false;
-
-				break;
-			}
-
-			if ( !Found )
+		for ( int i = 0; i < Buffer.size( ); i++ ) {
+			hde64s hs;
+			if ( hde64_disasm( Buffer.data( ) + i, &hs ) == 0 )
 				continue;
 
-			const SHORT SystemCallNumber = 
-				reinterpret_cast< PSHORT >( Buffer.data( ) + i )[ 2 ];
+			/*
+				mov eax, scn
+			*/
+			if ( hs.opcode == 0xB8 )
+				SavedSystemCallNumber = hs.imm.imm16;
 
-			if ( m_SystemCallNumberMappings.find( SystemCallNumber ) == m_SystemCallNumberMappings.end( ) )
+			/*
+				syscall
+			*/
+			if ( hs.opcode != 0x0F || hs.opcode2 != 0x05 )
 				continue;
+
+			std::string Name;
+
+			auto it = m_SystemCallNumberMappings.find( SavedSystemCallNumber );
+			if ( it != m_SystemCallNumberMappings.end( ) )
+				Name = it->second;
+			else
+				Name = "Unknown";
 
 			m_ReportData.Populate( ReportValue {
-				std::format( 
-					"Dynamically allocated direct syscall stub ({}) has been detected at {}", 
-					
-					m_SystemCallNumberMappings[ SystemCallNumber ],
-					Memory->ToString( reinterpret_cast< PBYTE >( mbi.BaseAddress ) + i ) 
+				std::format(
+					"Dynamically allocated direct syscall stub ({}) has been detected at {}",
+
+					Name,
+					Memory->ToString( reinterpret_cast< PBYTE >( mbi.BaseAddress ) + i )
 				),
 
 				EReportSeverity::Severe
