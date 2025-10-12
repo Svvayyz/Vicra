@@ -1,7 +1,7 @@
 #include "../Header.h"
 
 namespace Vicra {
-void PolicyDetection::Run( const std::shared_ptr< IProcess >& Process, const USHORT& Verdict ) {
+VOID PolicyDetection::Run( const std::shared_ptr< Process >& Process, const std::shared_ptr< Driver >& Driver, const USHORT& Verdict ) {
 	PS_PROTECTION pp {};
 	if ( Process->Query(
 		ProcessProtectionInformation,

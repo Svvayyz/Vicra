@@ -1,7 +1,7 @@
 #pragma once
 
 namespace Vicra {
-class ProcessMemory final : public IProcessMemory {
+class ProcessMemory final {
 public:
 	ProcessMemory( const HANDLE& Handle ) : m_Handle( Handle ) { };
 
@@ -11,7 +11,7 @@ public:
 
 		const PVOID pBuffer,
 		const SIZE_T nBytesToRead
-	) override;
+	);
 
 	const BOOL Query(
 		const PVOID pAddress,
@@ -20,59 +20,67 @@ public:
 
 		const PVOID pBuffer,
 		const SIZE_T nBytesToRead
-	) override;
+	);
 
 	const std::string ToString(
 		const PVOID pAddress
-	) override;
+	);
 
 private:
 	const HANDLE& m_Handle;
 };
 
-class Process final : public IProcess {
+class Process final {
 public:
 	Process( ) {
 		m_Memory = std::make_shared< ProcessMemory >( m_Handle );
 	}
 
 public:
-	void Setup( ) override;
-	void Close( ) override;
+	void Setup( );
+	void Close( );
 
 	const BOOL Attach( 
 		const DWORD ProcessId, 
 
 		const ACCESS_MASK DesiredAccess = PROCESS_QUERY_LIMITED_INFORMATION 
-	) override;
+	);
 	const BOOL AttachByName(
 		const std::wstring& ProcessName,
 
 		const ACCESS_MASK DesiredAccess = PROCESS_QUERY_LIMITED_INFORMATION
-	) override;
-	const BOOL AttachMaxPrivileges( const std::wstring& ProcessName ) override;
+	);
+	const BOOL AttachMaxPrivileges( const std::wstring& ProcessName );
 
 	const BOOL Query(
 		const PROCESSINFOCLASS Class,
 
 		const PVOID pProcessInformation,
 		const SIZE_T nProcessInformationLength
-	) override;
-	const ACCESS_MASK QueryAccessMask( ) override;
+	);
+	const ACCESS_MASK QueryAccessMask( );
 
-	std::shared_ptr< IProcessMemory >& GetMemory( ) override { return m_Memory; }
-
-public:
-	const PVOID DecodePointer( const PVOID Pointer ) override;
+	std::shared_ptr< ProcessMemory >& GetMemory( ) { return m_Memory; }
 
 public:
-	const HANDLE DuplicateHandle( const HANDLE& Value ) override;
-	const BOOL IsProcessInJob( const HANDLE& Job ) override;
+	const PVOID DecodePointer( const PVOID Pointer );
+
+public:
+	const HANDLE DuplicateHandle( const HANDLE& Value );
+	const BOOL IsProcessInJob( const HANDLE& Job );
+
+	const DWORD GetProcessId( ) {
+		return ::GetProcessId( m_Handle );
+	}
 
 private:
 	HANDLE m_Handle = INVALID_HANDLE_VALUE;
 
 private:
-	std::shared_ptr< IProcessMemory > m_Memory;
+	std::shared_ptr< ProcessMemory > m_Memory;
+
+public:
+	DWORD64 EProcess = NULL;
+	ULONG Cookie = NULL;
 };
 }

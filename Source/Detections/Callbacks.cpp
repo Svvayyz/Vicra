@@ -13,7 +13,7 @@ typedef struct _VECTXCPT_CALLOUT_ENTRY {
 } VECTXCPT_CALLOUT_ENTRY, * PVECTXCPT_CALLOUT_ENTRY;
 
 namespace Vicra {
-void CallbackDetection::NtDllResolver( ) {
+VOID CallbackDetection::NtDllResolver( ) {
 	auto FindListHead = [ ] ( const HMODULE& NtDll, const PLIST_ENTRY Entry ) -> PVOID {
 		auto Base = ( PBYTE )( NtDll );
 
@@ -96,7 +96,7 @@ void CallbackDetection::NtDllResolver( ) {
 	RtlRemoveVectoredExceptionHandler( VehCookie );
 }
 
-void CallbackDetection::Run( const std::shared_ptr< IProcess >& Process, const USHORT& Verdict ) {
+VOID CallbackDetection::Run( const std::shared_ptr< Process >& Process, const std::shared_ptr< Driver >& Driver, const USHORT& Verdict ) {
 	auto& Memory = Process->GetMemory( );
 
 	PROCESS_INSTRUMENTATION_CALLBACK_INFORMATION pici { };

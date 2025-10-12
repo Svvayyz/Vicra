@@ -7,7 +7,8 @@ enum class EReportFlags : USHORT {
 	AvoidVMQuerying = ( 1 << 1 ),
 	AvoidVMProtection = ( 1 << 2 ),
 	AvoidCodeInjection = ( 1 << 3 ),
-	AvoidDebugging = ( 1 << 4 )
+	AvoidDebugging = ( 1 << 4 ),
+	AvoidVMReading = ( 1 << 5 )
 };
 enum class EReportSeverity {
 	Information,

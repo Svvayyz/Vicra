@@ -3,6 +3,8 @@
 #include <phnt_windows.h>
 #include <phnt.h>
 
+#include <Psapi.h>
+
 #include <algorithm>
 #include <memory>
 #include <vector>

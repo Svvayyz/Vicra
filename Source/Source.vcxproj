@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -173,6 +173,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Common\Driver.cpp" />
     <ClCompile Include="Common\Process.cpp" />
     <ClCompile Include="Detections\Callbacks.cpp" />
     <ClCompile Include="Detections\Objects.cpp" />
@@ -181,6 +182,7 @@
     <ClCompile Include="Main.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Common\Driver.h" />
     <ClInclude Include="Common\Process.h" />
     <ClInclude Include="Detections\Callbacks.h" />
     <ClInclude Include="Detections\Objects.h" />
@@ -189,7 +191,6 @@
     <ClInclude Include="Header.h" />
     <ClInclude Include="Includes.h" />
     <ClInclude Include="Interfaces\IPlugin.h" />
-    <ClInclude Include="Interfaces\IProcess.h" />
     <ClInclude Include="Common\ReportData.h" />
     <ClInclude Include="Managers\PluginManager.h" />
   </ItemGroup>

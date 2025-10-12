@@ -12,6 +12,14 @@ private:
 	std::unordered_map< USHORT, std::wstring > m_NameMappings { };
 
 private:
+	SHORT m_ThreadListHeadOffset = NULL;
+	SHORT m_CrossThreadFlagsOffset = NULL;
+	SHORT m_UniqueThreadIdOffset = NULL;
+
+	BYTE m_MiscFlagsOffset = NULL;
+	SHORT m_ThreadSuspendCountOffset = NULL;
+
+private:
 	/*
 		Helper function for NtQuerySystemInformation
 	*/
@@ -86,9 +94,10 @@ private:
 	}
 
 private:
-	void ForEachHandle( HandlerFunction Handler );
+	VOID ForEachHandle( HandlerFunction Handler );
+	VOID ResolveOffsets( const std::shared_ptr< Driver >& Driver );
 
 public:
-	void Run( const std::shared_ptr< IProcess >& Process, const USHORT& Verdict ) override;
+	VOID Run( const std::shared_ptr< Process >& Process, const std::shared_ptr< Driver >& Driver, const USHORT& Verdict ) override;
 };
 }

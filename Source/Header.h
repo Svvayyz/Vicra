@@ -9,10 +9,10 @@
 #define MSG_SEVERE "\033[42m\033[43m SEVERE \033[0m "
 #define MSG_INFO "\033[42m\033[30m INFO \033[0m "
 
-#include "Interfaces/IProcess.h"
+#include "Common/Driver.h"
+#include "Common/Process.h"
 
 #include "Common/ReportData.h"
-#include "Common/Process.h"
 
 #include "Interfaces/IPlugin.h"
 

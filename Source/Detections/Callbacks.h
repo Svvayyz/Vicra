@@ -23,6 +23,6 @@ private:
 	PVOID m_LdrpVectorHandlerList = NULL;
 
 public:
-	VOID Run( const std::shared_ptr< IProcess >& Process, const USHORT& Verdict ) override;
+	VOID Run( const std::shared_ptr< Process >& Process, const std::shared_ptr< Driver >& Driver, const USHORT& Verdict ) override;
 };
 }

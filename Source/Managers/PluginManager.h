@@ -7,11 +7,11 @@ private:
 
 public:
 	void RegisterPlugin( std::shared_ptr< IPlugin > Plugin ) { m_Plugins.emplace_back( Plugin ); }
-	void RunAll( std::shared_ptr< Process >& Process ) {
+	void RunAll( std::shared_ptr< Process >& Process, std::shared_ptr< Driver >& Driver ) {
 		USHORT Verdict = 0;
 
 		for ( auto& Plugin : m_Plugins ) {
-			Plugin->Run( Process, Verdict );
+			Plugin->Run( Process, Driver, Verdict );
 
 			auto& ReportData = Plugin->GetReportData( );
 			if ( !ReportData.HasAnyReports( ) ) continue;

@@ -3,7 +3,7 @@
 #include <hde64.h>
 
 namespace Vicra {
-void MemoryDetection::CreateSCNMappings( ) {
+VOID MemoryDetection::CreateSCNMappings( ) {
 	UNICODE_STRING NtDllName {};
 
 	PBYTE NtDll;
@@ -45,7 +45,32 @@ void MemoryDetection::CreateSCNMappings( ) {
 	}
 }
 
-void MemoryDetection::Run( const std::shared_ptr< IProcess >& Process, const USHORT& Verdict ) {
+VOID MemoryDetection::Run( const std::shared_ptr< Process >& Process, const std::shared_ptr< Driver >& Driver, const USHORT& Verdict ) {
+	if ( !Driver->IsConnected )
+		m_ReportData.Populate( ReportValue {
+			"The Driver isn't connected, the MemoryDetection output might be incorrect!"
+		} );
+
+	if ( Driver->IsConnected ) {
+		/*
+			TODO: 
+				Even though the offset is the same on EVERY single version of windows (from xp to 24h2)
+				Disassembling KeAttachProcess, searching for the 2nd call (KiAttachProcess), and then for 
+				movzx   eax, byte ptr [r10+28h]
+				would be more future-proof
+		*/
+		if ( Driver->Read64( Process->EProcess + 0x28 ) & 0xFFFF000000000000ULL ) {
+			m_ReportData.Populate( ReportValue {
+				"The (reserved) upper 16 bits of KProcess::DirectoryTableBase are set... Setting them to the CR3 register will result in a #GP exception. Aborting further execution of MemoryDetection.",
+
+				EReportSeverity::Critical,
+				EReportFlags::AvoidVMReading
+			} );
+
+			return;
+		}
+	}
+
 	if ( Verdict & ( USHORT ) EReportFlags::AvoidVMQuerying )
 		return;
 

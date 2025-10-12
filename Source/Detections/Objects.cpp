@@ -1,7 +1,7 @@
 #include "../Header.h"
 
 namespace Vicra {
-void ObjectDetection::ForEachHandle( HandlerFunction Handler ) {
+VOID ObjectDetection::ForEachHandle( HandlerFunction Handler ) {
 	auto shi = Query< PSYSTEM_HANDLE_INFORMATION_EX >(
 		SystemExtendedHandleInformation
 	);
@@ -47,8 +47,147 @@ void ObjectDetection::ForEachHandle( HandlerFunction Handler ) {
 		NtClose( DuplicatedHandle );
 	}
 }
+VOID ObjectDetection::ResolveOffsets( const std::shared_ptr< Driver >& Driver ) {
+	ANSI_STRING PsQueryTotalCycleTimeProcessName {};
+	ANSI_STRING PsIsThreadTerminatingName {};
+	ANSI_STRING PsGetThreadIdName {};
+	ANSI_STRING PsSuspendProcessName {};
 
-void ObjectDetection::Run( const std::shared_ptr< IProcess >& Process, const USHORT& Verdict ) {
+	RtlInitAnsiString( &PsQueryTotalCycleTimeProcessName, "PsQueryTotalCycleTimeProcess" );
+	RtlInitAnsiString( &PsIsThreadTerminatingName, "PsIsThreadTerminating" );
+	RtlInitAnsiString( &PsGetThreadIdName, "PsGetThreadId" );
+	RtlInitAnsiString( &PsSuspendProcessName, "PsSuspendProcess" );
+
+	PBYTE pPsQueryTotalCycleTimeProcess = NULL;
+	PBYTE pPsIsThreadTerminating = NULL;
+	PBYTE pPsGetThreadId = NULL;
+	PBYTE pPsSuspendProcess = NULL;
+
+	if ( !NT_SUCCESS( LdrGetProcedureAddress(
+		Driver->NtosKrnl, &PsQueryTotalCycleTimeProcessName,
+		NULL, ( PPVOID )&pPsQueryTotalCycleTimeProcess
+	) ) ) return;
+
+	if ( !NT_SUCCESS( LdrGetProcedureAddress(
+		Driver->NtosKrnl, &PsIsThreadTerminatingName,
+		NULL, ( PPVOID )&pPsIsThreadTerminating
+	) ) ) return;
+
+	if ( !NT_SUCCESS( LdrGetProcedureAddress(
+		Driver->NtosKrnl, &PsGetThreadIdName,
+		NULL, ( PPVOID )&pPsGetThreadId
+	) ) ) return;
+
+	if ( !NT_SUCCESS( LdrGetProcedureAddress(
+		Driver->NtosKrnl, &PsSuspendProcessName,
+		NULL, ( PPVOID )&pPsSuspendProcess
+	) ) ) return;
+
+	/*
+		lea     rax, [rdi+370h]
+	*/
+	m_ThreadListHeadOffset = reinterpret_cast< PSHORT >( pPsQueryTotalCycleTimeProcess + 0x42 + 0x3 )[ 0 ];
+
+	/*
+		mov     eax, [rcx+5A0h]
+		and     al, 1
+		retn
+	*/
+	m_CrossThreadFlagsOffset = reinterpret_cast< PSHORT >( pPsIsThreadTerminating + 0x2 )[ 0 ];
+
+	/*
+		mov     rax, [rcx+510h]
+		retn
+	*/
+	m_UniqueThreadIdOffset = reinterpret_cast< PSHORT >( pPsGetThreadId + 0x3 )[ 0 ];
+
+	/*
+		test    dword ptr [rax+74h], 200000h
+	*/
+	m_MiscFlagsOffset = reinterpret_cast< PBYTE >( pPsSuspendProcess + 0x54 + 0x2 )[ 0 ];
+
+	/*
+		This is different <win10 but seems pretty stable nowadays
+		TODO: Dynamically grab this, NtQueryInformationThread ThreadSuspendCount works I guess
+	*/
+	m_ThreadSuspendCountOffset = 0x284;
+}
+
+VOID ObjectDetection::Run( const std::shared_ptr< Process >& Process, const std::shared_ptr< Driver >& Driver, const USHORT& Verdict ) {
+	if ( Driver->IsConnected ) {
+		ResolveOffsets( Driver );
+
+		if ( !m_ThreadListHeadOffset || !m_CrossThreadFlagsOffset || !m_UniqueThreadIdOffset )
+			return;
+
+		auto Head = Driver->Read64( Process->EProcess + m_ThreadListHeadOffset );
+		auto Current = Driver->Read64( Head );
+
+		while ( Current && Current != Head ) {
+			/*
+				struct _LIST_ENTRY ThreadListEntry;                                     //0x578
+				struct _EX_RUNDOWN_REF RundownProtect;                                  //0x588
+				struct _EX_PUSH_LOCK ThreadLock;                                        //0x590
+				ULONG ReadClusterSize;                                                  //0x598
+				volatile ULONG MmLockOrdering;                                          //0x59c
+				union
+				{
+					ULONG CrossThreadFlags;                                             //0x5a0
+
+				This is only temporary, TODO: Fix this
+			*/
+			auto EThread = Current - ( m_CrossThreadFlagsOffset - 0x28 );
+
+			auto CrossThreadFlags = 
+				Driver->Read32( EThread + m_CrossThreadFlagsOffset );
+			auto MiscFlags =
+				Driver->Read32( EThread + m_MiscFlagsOffset );
+
+			auto ThreadSuspendCount = 
+				Driver->Read32( EThread + m_ThreadSuspendCountOffset ) & 0xFF;
+			auto UniqueThreadId =
+				Driver->Read32( EThread + m_UniqueThreadIdOffset );
+
+			/*
+				if ( (*(_DWORD *)(v4 + 116) & 0x200000) == 0 )
+					sub_1409BA290(v4, 0i64);
+
+				 ULONG BypassProcessFreeze:1;                                    //0x74
+			*/
+			if ( MiscFlags & 0x200000 )
+				m_ReportData.Populate( ReportValue {
+					std::format( "Thread {} has the BypassProcessFreeze KThread::MiscFlag set!", UniqueThreadId ),
+					EReportSeverity::Severe,
+					EReportFlags::AvoidDebugging
+				} );
+
+			/*
+				NtQueryInformationThread ThreadSuspendCount (0x23)
+			*/
+			if ( ThreadSuspendCount == std::numeric_limits< char >::max( ) ) 
+				m_ReportData.Populate( ReportValue {
+					std::format( "Thread {}'s KThread::SuspendCount is the maximum!", UniqueThreadId ),
+					EReportSeverity::Severe,
+					EReportFlags::AvoidDebugging
+				} );
+
+			/*
+				ULONG Terminated:1;                                             //0x5a0
+				ULONG ThreadInserted:1;                                         //0x5a0
+				ULONG HideFromDebugger:1;                                       //0x5a0
+			*/
+			if ( CrossThreadFlags & ( 1 << 2 ) )
+				m_ReportData.Populate( ReportValue {
+					std::format( "Thread {} has the ThreadHideFromDebugger EThread::CrossThreadFlag set!", UniqueThreadId ),
+					EReportSeverity::Severe,
+					EReportFlags::AvoidDebugging
+				} );
+
+		Next:
+			Current = Driver->Read64( Current );
+		}
+	}
+
 	PROCESS_BASIC_INFORMATION pbi { };
 	if ( !Process->Query(
 		ProcessBasicInformation,
