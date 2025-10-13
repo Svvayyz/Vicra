@@ -107,10 +107,7 @@ VOID MemoryDetection::Run( const std::shared_ptr< Process >& Process, const std:
 		if ( mbi.State != MEM_COMMIT || mbi.Type != MEM_PRIVATE || mbi.RegionSize > si.dwPageSize * 10 )
 			goto Next;
 
-		if ( 
-			!( mbi.Protect & ( PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_READ ) ) || 
-			mbi.Protect & ( PAGE_GUARD | PAGE_NOACCESS ) 
-		)
+		if ( !( mbi.Protect & ( PAGE_EXECUTABLE_AND_READABLE ) ) )
 			goto Next;
 
 		Buffer.resize( mbi.RegionSize );

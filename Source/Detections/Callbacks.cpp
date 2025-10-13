@@ -115,6 +115,9 @@ VOID CallbackDetection::Run( const std::shared_ptr< Process >& Process, const st
 
 	NtDllResolver( );
 
+	if ( Verdict & ( USHORT )EReportFlags::AvoidVMReading )
+		return;
+
 	/*
 		TODO: Make a function for this to avoid repetitive code
 	*/
@@ -129,6 +132,16 @@ VOID CallbackDetection::Run( const std::shared_ptr< Process >& Process, const st
 				sizeof( LDR_DLL_NOTIFICATION_ENTRY )
 			) ) break;
 
+			MEMORY_BASIC_INFORMATION mbi {};
+			if ( !Memory->Query(
+				Entry.Callback,
+				MemoryBasicInformation,
+				&mbi, sizeof( MEMORY_BASIC_INFORMATION )
+			) ) goto NextLdrNotification;
+
+			if ( !( mbi.Protect & PAGE_EXECUTABLE ) )
+				goto NextLdrNotification;
+
 			m_ReportData.Populate( ReportValue {
 				"LdrDllNotificationList @ ntdll entry: " + Memory->ToString( Entry.Callback ),
 
@@ -136,6 +149,7 @@ VOID CallbackDetection::Run( const std::shared_ptr< Process >& Process, const st
 				EReportFlags::AvoidCodeInjection
 			} );
 
+		NextLdrNotification:
 			Current = Entry.List.Flink;
 		} while ( Current != m_LdrpDllNotificationList );
 	}
@@ -151,6 +165,14 @@ VOID CallbackDetection::Run( const std::shared_ptr< Process >& Process, const st
 			) )
 				break;
 
+			MEMORY_BASIC_INFORMATION mbi {};
+			if ( Memory->Query(
+				Entry.VectoredHandler,
+				MemoryBasicInformation,
+				&mbi, sizeof( MEMORY_BASIC_INFORMATION )
+			) ) 
+				goto NextVectoredHandler;
+
 			m_ReportData.Populate( ReportValue {
 				std::format( "LdrpVectoredHandlerList @ ntdll entry: {}", Memory->ToString( Process->DecodePointer( Entry.VectoredHandler ) ) ),
 
@@ -158,6 +180,7 @@ VOID CallbackDetection::Run( const std::shared_ptr< Process >& Process, const st
 				EReportFlags::AvoidCodeInjection
 			} );
 
+		NextVectoredHandler:
 			Current = Entry.Links.Flink;
 		} while ( Current != m_LdrpVectorHandlerList );
 	}
