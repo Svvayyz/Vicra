@@ -2,8 +2,8 @@
 
 int wmain( int argc, const wchar_t** argv ) {
 	auto Driver = std::make_shared< Vicra::Driver >( );
-
 	auto Process = std::make_shared< Vicra::Process >( );
+
 	if ( !Process->AttachMaxPrivileges( argv[ 1 ] ) ) {
 		return 0;
 	}

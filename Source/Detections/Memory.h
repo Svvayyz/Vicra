@@ -8,6 +8,9 @@ private:
 private:
 	VOID CreateSCNMappings( );
 
+private:
+	SHORT m_DirectoryTableBaseOffset = 0x28;
+
 public:
 	VOID Run( const std::shared_ptr< Process >& Process, const std::shared_ptr< Driver >& Driver, const USHORT& Verdict ) override;
 };

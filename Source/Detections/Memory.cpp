@@ -59,7 +59,7 @@ VOID MemoryDetection::Run( const std::shared_ptr< Process >& Process, const std:
 				movzx   eax, byte ptr [r10+28h]
 				would be more future-proof
 		*/
-		if ( Driver->Read64( Process->EProcess + 0x28 ) & 0xFFFF000000000000ULL ) {
+		if ( Driver->Read64( Process->EProcess + m_DirectoryTableBaseOffset ) & 0xFFFF000000000000ULL ) {
 			m_ReportData.Populate( ReportValue {
 				"The (reserved) upper 16 bits of KProcess::DirectoryTableBase are set... Setting them to the CR3 register will result in a #GP exception. Aborting further execution of MemoryDetection.",
 

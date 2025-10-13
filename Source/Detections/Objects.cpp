@@ -48,24 +48,24 @@ VOID ObjectDetection::ForEachHandle( HandlerFunction Handler ) {
 	}
 }
 VOID ObjectDetection::ResolveOffsets( const std::shared_ptr< Driver >& Driver ) {
-	ANSI_STRING PsQueryTotalCycleTimeProcessName {};
+	ANSI_STRING PsGetProcessActiveThreadCountName {};
 	ANSI_STRING PsIsThreadTerminatingName {};
 	ANSI_STRING PsGetThreadIdName {};
-	ANSI_STRING PsSuspendProcessName {};
+	ANSI_STRING PsIsSystemThreadName {};
 
-	RtlInitAnsiString( &PsQueryTotalCycleTimeProcessName, "PsQueryTotalCycleTimeProcess" );
+	RtlInitAnsiString( &PsGetProcessActiveThreadCountName, "PsGetProcessActiveThreadCount" );
 	RtlInitAnsiString( &PsIsThreadTerminatingName, "PsIsThreadTerminating" );
 	RtlInitAnsiString( &PsGetThreadIdName, "PsGetThreadId" );
-	RtlInitAnsiString( &PsSuspendProcessName, "PsSuspendProcess" );
+	RtlInitAnsiString( &PsIsSystemThreadName, "PsIsSystemThread" );
 
-	PBYTE pPsQueryTotalCycleTimeProcess = NULL;
+	PBYTE pPsGetProcessActiveThreadCount = NULL;
 	PBYTE pPsIsThreadTerminating = NULL;
 	PBYTE pPsGetThreadId = NULL;
-	PBYTE pPsSuspendProcess = NULL;
+	PBYTE pPsIsSystemThread = NULL;
 
 	if ( !NT_SUCCESS( LdrGetProcedureAddress(
-		Driver->NtosKrnl, &PsQueryTotalCycleTimeProcessName,
-		NULL, ( PPVOID )&pPsQueryTotalCycleTimeProcess
+		Driver->NtosKrnl, &PsGetProcessActiveThreadCountName,
+		NULL, ( PPVOID )&pPsGetProcessActiveThreadCount
 	) ) ) return;
 
 	if ( !NT_SUCCESS( LdrGetProcedureAddress(
@@ -79,14 +79,18 @@ VOID ObjectDetection::ResolveOffsets( const std::shared_ptr< Driver >& Driver ) 
 	) ) ) return;
 
 	if ( !NT_SUCCESS( LdrGetProcedureAddress(
-		Driver->NtosKrnl, &PsSuspendProcessName,
-		NULL, ( PPVOID )&pPsSuspendProcess
+		Driver->NtosKrnl, &PsIsSystemThreadName,
+		NULL, ( PPVOID )&pPsIsSystemThread
 	) ) ) return;
 
 	/*
-		lea     rax, [rdi+370h]
+		mov     eax, [rcx+380h]
+		retn
+
+		struct _LIST_ENTRY ThreadListHead;                                      //0x370
+		volatile ULONG ActiveThreads;                                           //0x380
 	*/
-	m_ThreadListHeadOffset = reinterpret_cast< PSHORT >( pPsQueryTotalCycleTimeProcess + 0x42 + 0x3 )[ 0 ];
+	m_ThreadListHeadOffset = reinterpret_cast< PSHORT >( pPsGetProcessActiveThreadCount + 0x2 )[ 0 ] - 0x10;
 
 	/*
 		mov     eax, [rcx+5A0h]
@@ -104,7 +108,13 @@ VOID ObjectDetection::ResolveOffsets( const std::shared_ptr< Driver >& Driver ) 
 	/*
 		test    dword ptr [rax+74h], 200000h
 	*/
-	m_MiscFlagsOffset = reinterpret_cast< PBYTE >( pPsSuspendProcess + 0x54 + 0x2 )[ 0 ];
+	/*
+		mov     eax, [rcx+74h]  ; IoIsSystemThread
+		shr     eax, 0Ah
+		and     al, 1
+		retn
+	*/
+	m_MiscFlagsOffset = reinterpret_cast< PBYTE >( pPsIsSystemThread + 0x2 )[ 0 ];
 
 	/*
 		This is different <win10 but seems pretty stable nowadays
@@ -147,6 +157,10 @@ VOID ObjectDetection::Run( const std::shared_ptr< Process >& Process, const std:
 				Driver->Read32( EThread + m_ThreadSuspendCountOffset ) & 0xFF;
 			auto UniqueThreadId =
 				Driver->Read32( EThread + m_UniqueThreadIdOffset );
+
+
+			if ( !UniqueThreadId )
+				goto Next;
 
 			/*
 				if ( (*(_DWORD *)(v4 + 116) & 0x200000) == 0 )
