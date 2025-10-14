@@ -185,7 +185,73 @@ VOID CallbackDetection::Run( const std::shared_ptr< Process >& Process, const st
 		} while ( Current != m_LdrpVectorHandlerList );
 	}
 
-	// TODO: TLS Callbacks
+	// TODO: omg tls callbacks hi!!
+	
+	struct L_LIST_ENTRY { PVOID Flink; PVOID Blink; };
+	struct L_UNICODE_STRING { USHORT Length; USHORT MaximumLength; PWSTR Buffer; };
+	struct L_PEB_LDR_DATA { ULONG Length; BOOLEAN Initialized; PVOID SsHandle; L_LIST_ENTRY InLoadOrderModuleList; L_LIST_ENTRY InMemoryOrderModuleList; L_LIST_ENTRY InInitializationOrderModuleList; };
+	struct L_LDR_DATA_TABLE_ENTRY { L_LIST_ENTRY InLoadOrderLinks; L_LIST_ENTRY InMemoryOrderLinks; L_LIST_ENTRY InInitializationOrderLinks; PVOID DllBase; PVOID EntryPoint; ULONG SizeOfImage; L_UNICODE_STRING FullDllName; L_UNICODE_STRING BaseDllName; };
+	struct L_PEB { BYTE Rsv[0x18]; PVOID Ldr; };
+
+	auto& M = Process->GetMemory();
+
+	PROCESS_BASIC_INFORMATION pbi{};
+	if (!Process->Query(ProcessBasicInformation, &pbi, sizeof(pbi))) return;
+
+	L_PEB peb{};
+	if (!M->Read(pbi.PebBaseAddress, &peb, sizeof(peb))) return;
+
+	L_PEB_LDR_DATA ldr{};
+	if (!M->Read(peb.Ldr, &ldr, sizeof(ldr))) return;
+
+	PVOID head = ldr.InLoadOrderModuleList.Flink;
+	PVOID cur = head;
+
+	for (;; ) {
+		L_LDR_DATA_TABLE_ENTRY e{};
+		if (!M->Read(cur, &e, sizeof(e))) break;
+
+		PVOID modBase = e.DllBase;
+		IMAGE_DOS_HEADER dos{};
+		if (!M->Read(modBase, &dos, sizeof(dos))) { cur = e.InLoadOrderLinks.Flink; if (!cur || cur == head) break; else continue; }
+		IMAGE_NT_HEADERS nt{};
+		if (!M->Read((PBYTE)modBase + dos.e_lfanew, &nt, sizeof(nt))) { cur = e.InLoadOrderLinks.Flink; if (!cur || cur == head) break; else continue; }
+
+		auto tlsDir = nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS];
+		if (!tlsDir.VirtualAddress || !tlsDir.Size) { cur = e.InLoadOrderLinks.Flink; if (!cur || cur == head) break; else continue; }
+
+		IMAGE_TLS_DIRECTORY64 tls{};
+		if (!M->Read((PBYTE)modBase + tlsDir.VirtualAddress, &tls, sizeof(tls))) { cur = e.InLoadOrderLinks.Flink; if (!cur || cur == head) break; else continue; }
+
+		ULONGLONG list{};
+		if (!M->Read((PVOID)tls.AddressOfCallBacks, &list, sizeof(list))) { cur = e.InLoadOrderLinks.Flink; if (!cur || cur == head) break; else continue; }
+
+		ULONGLONG p = list;
+		for (;; ) {
+			ULONGLONG cb{};
+			if (!M->Read((PVOID)p, &cb, sizeof(cb))) break;
+			if (!cb) break;
+
+			MEMORY_BASIC_INFORMATION mbi{};
+			if (M->Query((PVOID)cb, MemoryBasicInformation, &mbi, sizeof(mbi)) && (mbi.Protect & PAGE_EXECUTE)) {
+				std::wstring baseName;
+				if (e.BaseDllName.Buffer && e.BaseDllName.Length) {
+					baseName.resize(e.BaseDllName.Length / sizeof(wchar_t));
+					M->Read(e.BaseDllName.Buffer, baseName.data(), e.BaseDllName.Length);
+				}
+				std::string baseNameA(baseName.begin(), baseName.end());
+				m_ReportData.Populate(ReportValue{
+					std::format("TLS callback {} in {}", M->ToString((PVOID)cb), baseNameA),
+					EReportSeverity::Information,
+					EReportFlags::AvoidCodeInjection
+					});
+			}
+			p += sizeof(ULONGLONG);
+		}
+
+		cur = e.InLoadOrderLinks.Flink;
+		if (!cur || cur == head) break;
+	}
 	// TODO: Window Callbacks
 }
 }

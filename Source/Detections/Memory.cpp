@@ -160,5 +160,83 @@ VOID MemoryDetection::Run( const std::shared_ptr< Process >& Process, const std:
 	Next:
 		Current += mbi.RegionSize;
 	}
+
+	struct L_LIST_ENTRY { PVOID Flink; PVOID Blink; };
+	struct L_UNICODE_STRING { USHORT Length; USHORT MaximumLength; PWSTR Buffer; };
+	struct L_PEB_LDR_DATA { ULONG Length; BOOLEAN Initialized; PVOID SsHandle; L_LIST_ENTRY InLoadOrderModuleList; L_LIST_ENTRY InMemoryOrderModuleList; L_LIST_ENTRY InInitializationOrderModuleList; };
+	struct L_LDR_DATA_TABLE_ENTRY { L_LIST_ENTRY InLoadOrderLinks; L_LIST_ENTRY InMemoryOrderLinks; L_LIST_ENTRY InInitializationOrderLinks; PVOID DllBase; PVOID EntryPoint; ULONG SizeOfImage; L_UNICODE_STRING FullDllName; L_UNICODE_STRING BaseDllName; };
+	struct L_PEB { BYTE Rsv[0x18]; PVOID Ldr; };
+
+	auto& M = Process->GetMemory();
+
+	HMODULE localNtdll = GetModuleHandleW(L"ntdll.dll");
+	if (!localNtdll) localNtdll = LoadLibraryW(L"ntdll.dll");
+	if (!localNtdll) return;
+
+	PROCESS_BASIC_INFORMATION pbi{};
+	if (!Process->Query(ProcessBasicInformation, &pbi, sizeof(pbi))) return;
+
+	L_PEB peb{};
+	if (!M->Read(pbi.PebBaseAddress, &peb, sizeof(peb))) return;
+
+	L_PEB_LDR_DATA ldr{};
+	if (!M->Read(peb.Ldr, &ldr, sizeof(ldr))) return;
+
+	PVOID head = ldr.InLoadOrderModuleList.Flink;
+	PVOID cur = head;
+	PVOID remoteBase = nullptr;
+
+	for (;; ) {
+		L_LDR_DATA_TABLE_ENTRY e{};
+		if (!M->Read(cur, &e, sizeof(e))) break;
+
+		std::wstring base;
+		if (e.BaseDllName.Buffer && e.BaseDllName.Length) {
+			base.resize(e.BaseDllName.Length / sizeof(wchar_t));
+			M->Read(e.BaseDllName.Buffer, base.data(), e.BaseDllName.Length);
+		}
+
+		std::wstring low = base;
+		for (auto& ch : low) ch = (wchar_t)towlower(ch);
+		if (low == L"ntdll.dll") { remoteBase = e.DllBase; break; }
+
+		cur = e.InLoadOrderLinks.Flink;
+		if (!cur || cur == head) break;
+	}
+
+	if (!remoteBase) return;
+
+	auto dos = (PIMAGE_DOS_HEADER)localNtdll;
+	auto nt = (PIMAGE_NT_HEADERS)((PBYTE)localNtdll + dos->e_lfanew);
+	auto dir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
+	auto ed = (PIMAGE_EXPORT_DIRECTORY)((PBYTE)localNtdll + dir.VirtualAddress);
+	auto names = (PDWORD)((PBYTE)localNtdll + ed->AddressOfNames);
+	auto ords = (PWORD)((PBYTE)localNtdll + ed->AddressOfNameOrdinals);
+	auto funcs = (PDWORD)((PBYTE)localNtdll + ed->AddressOfFunctions);
+
+	const SIZE_T SZ = 64;
+	std::vector<BYTE> lb(SZ), rb(SZ);
+
+	for (DWORD i = 0; i < ed->NumberOfNames; ++i) {
+		auto name = (LPCSTR)((PBYTE)localNtdll + names[i]);
+		auto rva = funcs[ords[i]];
+		auto lfn = (PBYTE)localNtdll + rva;
+		auto rfn = (PBYTE)remoteBase + rva;
+
+		if (!ReadProcessMemory(GetCurrentProcess(), lfn, lb.data(), lb.size(), nullptr)) continue;
+		if (!M->Read(rfn, rb.data(), rb.size())) continue;
+
+		bool diff = memcmp(lb.data(), rb.data(), lb.size()) != 0;
+		bool cc = true; for (size_t k = 0; k < 8 && k < rb.size(); ++k) { if (rb[k] != 0xCC) { cc = false; break; } }
+		if (!diff && memcmp(lb.data(), rb.data(), 8) != 0) diff = true;
+
+		if (diff || cc) {
+			m_ReportData.Populate(ReportValue{
+				std::format("Inline hook detected on ntdll!{} (diff={},cc={})", name, diff ? 1 : 0, cc ? 1 : 0),
+				EReportSeverity::Severe,
+				EReportFlags::AvoidCodeInjection
+				});
+		}
+	}
 }
 }

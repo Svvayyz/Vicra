@@ -62,5 +62,27 @@ VOID PolicyDetection::Run( const std::shared_ptr< Process >& Process, const std:
 			EReportSeverity::Information,
 			EReportFlags::AvoidCodeInjection
 		} );
+
+	
+		PROCESS_BASIC_INFORMATION pbi{};
+		if (Process->Query(ProcessBasicInformation, &pbi, sizeof(pbi))) {
+			auto& M = Process->GetMemory();
+			BYTE dbg{};
+			if (M->Read((PBYTE)pbi.PebBaseAddress + offsetof(PEB, BeingDebugged), &dbg, sizeof(dbg)) && dbg)
+				m_ReportData.Populate(ReportValue{ "PEB.BeingDebugged is set", EReportSeverity::Severe, EReportFlags::AvoidDebugging });
+
+			ULONG ntgf{};
+			if (M->Read((PBYTE)pbi.PebBaseAddress + offsetof(PEB, NtGlobalFlag), &ntgf, sizeof(ntgf)) && (ntgf & 0x70))
+				m_ReportData.Populate(ReportValue{ "NtGlobalFlag debug bits set", EReportSeverity::Severe, EReportFlags::AvoidDebugging });
+		}
+
+		using NtSetInformationThread_t = NTSTATUS(NTAPI*)(HANDLE, THREAD_INFORMATION_CLASS, PVOID, ULONG);
+		auto pNtSetInformationThread = reinterpret_cast<NtSetInformationThread_t>(GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtSetInformationThread"));
+		if (pNtSetInformationThread) {
+			if (NT_SUCCESS(pNtSetInformationThread(GetCurrentThread(), (THREAD_INFORMATION_CLASS)0x11, nullptr, 0)))
+				m_ReportData.Populate(ReportValue{ "NtSetInformationThread(ThreadHideFromDebugger) succeeded", EReportSeverity::Information, EReportFlags::AvoidDebugging });
+		}
+	
+
 }
 }
