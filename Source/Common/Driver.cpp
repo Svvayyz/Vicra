@@ -15,8 +15,8 @@ const DWORD64 Driver::FindProcess( const DWORD& UniqueProcessIdToFind ) {
 
 	do {
 		auto EProcess = Current - m_ActiveProcessLinksOffset;
-
 		auto UniqueProcessId = Read32( EProcess + m_UniqueProcessIdOffset );
+
 		if ( UniqueProcessId == UniqueProcessIdToFind )
 			return EProcess;
 
