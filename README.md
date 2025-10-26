@@ -10,3 +10,9 @@ Vicra aims to provide automated, extensible detection of Windows process securit
 - Process-level memory protection and inspection countermeasures
 - Anti-debugging mechanisms
 - Callback-based hooks and notification lists
+
+## Usage
+
+```
+Source-x64.exe <ProcessName>
+```
