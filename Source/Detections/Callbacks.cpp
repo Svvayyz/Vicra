@@ -99,7 +99,7 @@ VOID CallbackDetection::NtDllResolver( ) {
 		VehCookie = ( PLIST_ENTRY )( RtlAddVectoredContinueHandler( NULL, &DummyExceptionCallback ) )
 	) m_LdrpVectoredContinueHandlerList = FindListHead( NtDll, VehCookie->Blink );
 
-	RtlRemoveVectoredExceptionHandler( VehCookie );
+	RtlRemoveVectoredContinueHandler( VehCookie );
 }
 
 VOID CallbackDetection::Run( const std::shared_ptr< Process >& Process, const std::shared_ptr< Driver >& Driver, const USHORT& Verdict ) {
