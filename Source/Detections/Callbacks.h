@@ -11,7 +11,7 @@ private:
 	{
 		return;
 	}
-	static LONG CALLBACK DummyVEHCallback( PEXCEPTION_POINTERS ExceptionInfo ) {
+	static LONG CALLBACK DummyExceptionCallback( PEXCEPTION_POINTERS ExceptionInfo ) {
 		return NULL;
 	}
 
@@ -20,7 +20,9 @@ private:
 
 private:
 	PVOID m_LdrpDllNotificationList = NULL;
-	PVOID m_LdrpVectorHandlerList = NULL;
+
+	PVOID m_LdrpVectoredExceptionHandlerList = NULL;
+	PVOID m_LdrpVectoredContinueHandlerList = NULL;
 
 public:
 	VOID Run( const std::shared_ptr< Process >& Process, const std::shared_ptr< Driver >& Driver, const USHORT& Verdict ) override;

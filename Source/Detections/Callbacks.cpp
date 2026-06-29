@@ -84,15 +84,21 @@ VOID CallbackDetection::NtDllResolver( ) {
 		)
 	) ) m_LdrpDllNotificationList = FindListHead( NtDll, LdrCookie );
 
+	pLdrUnregisterDllNotification( LdrCookie );
+
 	/*
 		This needs improvement
 	*/
 	if ( 
-		VehCookie = ( PLIST_ENTRY )( RtlAddVectoredExceptionHandler( NULL, &DummyVEHCallback ) ) 
-	) m_LdrpVectorHandlerList = FindListHead( NtDll, VehCookie->Blink );
-	
+		VehCookie = ( PLIST_ENTRY )( RtlAddVectoredExceptionHandler( NULL, &DummyExceptionCallback ) )
+	) m_LdrpVectoredExceptionHandlerList = FindListHead( NtDll, VehCookie->Blink );
 
-	pLdrUnregisterDllNotification( LdrCookie );
+	RtlRemoveVectoredExceptionHandler( VehCookie );
+	
+	if (
+		VehCookie = ( PLIST_ENTRY )( RtlAddVectoredContinueHandler( NULL, &DummyExceptionCallback ) )
+	) m_LdrpVectoredContinueHandlerList = FindListHead( NtDll, VehCookie->Blink );
+
 	RtlRemoveVectoredExceptionHandler( VehCookie );
 }
 
@@ -153,8 +159,9 @@ VOID CallbackDetection::Run( const std::shared_ptr< Process >& Process, const st
 			Current = Entry.List.Flink;
 		} while ( Current != m_LdrpDllNotificationList );
 	}
-	if ( m_LdrpVectorHandlerList ) {
-		auto Current = m_LdrpVectorHandlerList;
+
+	if ( m_LdrpVectoredExceptionHandlerList ) {
+		auto Current = m_LdrpVectoredExceptionHandlerList;
 
 		do {
 			VECTXCPT_CALLOUT_ENTRY Entry {};
@@ -171,22 +178,53 @@ VOID CallbackDetection::Run( const std::shared_ptr< Process >& Process, const st
 				MemoryBasicInformation,
 				&mbi, sizeof( MEMORY_BASIC_INFORMATION )
 			) ) 
-				goto NextVectoredHandler;
+				goto NextVectoredExceptionHandler;
 
 			m_ReportData.Populate( ReportValue {
-				std::format( "LdrpVectoredHandlerList @ ntdll entry: {}", Memory->ToString( Process->DecodePointer( Entry.VectoredHandler ) ) ),
+				std::format( "LdrpVectoredExceptionHandlerList @ ntdll entry: {}", Memory->ToString( Process->DecodePointer( Entry.VectoredHandler ) ) ),
 
 				EReportSeverity::Severe,
 				EReportFlags::AvoidCodeInjection
 			} );
 
-		NextVectoredHandler:
+		NextVectoredExceptionHandler:
 			Current = Entry.Links.Flink;
-		} while ( Current != m_LdrpVectorHandlerList );
+		} while ( Current != m_LdrpVectoredExceptionHandlerList );
+	}
+	if ( m_LdrpVectoredContinueHandlerList ) {
+		auto Current = m_LdrpVectoredContinueHandlerList;
+
+		do {
+			VECTXCPT_CALLOUT_ENTRY Entry {};
+			if ( !Memory->Read(
+				Current,
+				&Entry,
+				sizeof( VECTXCPT_CALLOUT_ENTRY )
+			) )
+				break;
+
+			MEMORY_BASIC_INFORMATION mbi {};
+			if ( Memory->Query(
+				Entry.VectoredHandler,
+				MemoryBasicInformation,
+				&mbi, sizeof( MEMORY_BASIC_INFORMATION )
+			) )
+				goto NextVectoredContinueHandler;
+
+			m_ReportData.Populate( ReportValue {
+				std::format( "LdrpVectoredContinueHandlerList @ ntdll entry: {}", Memory->ToString( Process->DecodePointer( Entry.VectoredHandler ) ) ),
+
+				EReportSeverity::Severe,
+				EReportFlags::AvoidCodeInjection
+			} );
+
+		NextVectoredContinueHandler:
+			Current = Entry.Links.Flink;
+		} while ( Current != m_LdrpVectoredContinueHandlerList );
 	}
 
 	PROCESS_BASIC_INFORMATION pbi {};
-	if ( Process->Query(
+	if ( !Process->Query(
 		ProcessBasicInformation,
 		&pbi,
 		sizeof( PROCESS_BASIC_INFORMATION )
@@ -206,10 +244,30 @@ VOID CallbackDetection::Run( const std::shared_ptr< Process >& Process, const st
 		sizeof( PEB_LDR_DATA )
 	) ) return;
 
+	PLIST_ENTRY RemoteHead = reinterpret_cast< PLIST_ENTRY >(
+		reinterpret_cast< PBYTE >( Peb.Ldr ) + offsetof( PEB_LDR_DATA, InLoadOrderModuleList )
+	);
+
 	PLIST_ENTRY Head = &Ldr.InLoadOrderModuleList;
 	PLIST_ENTRY Current = Head->Flink;
 
-	while ( Current != Head )
+	struct Module
+	{
+		PBYTE Base;
+		PBYTE End;
+
+		IMAGE_NT_HEADERS NtHeader;
+	};
+
+	std::unordered_map<std::string, std::unordered_map<WORD, std::string>> NameByOrdinalMap;
+	std::unordered_map< std::string, Module > Modules = {};
+
+	/*
+		this needs improvement
+	*/
+	std::unordered_set< PBYTE > ExportAddressesSet;
+
+	while ( Current != RemoteHead )
 	{
 		auto EntryAddress =
 			reinterpret_cast< DWORD64 >( Current ) -
@@ -220,6 +278,13 @@ VOID CallbackDetection::Run( const std::shared_ptr< Process >& Process, const st
 			reinterpret_cast< PVOID >( EntryAddress ),
 			&Entry,
 			sizeof( LDR_DATA_TABLE_ENTRY )
+		) ) break;
+
+		std::vector< BYTE > Buffer( Entry.BaseDllName.Length );
+		if ( !Memory->Read(
+			Entry.BaseDllName.Buffer,
+			Buffer.data( ),
+			Entry.BaseDllName.Length
 		) ) break;
 
 		Current = Entry.InLoadOrderLinks.Flink;
@@ -245,6 +310,33 @@ VOID CallbackDetection::Run( const std::shared_ptr< Process >& Process, const st
 
 		if ( NtHeader.Signature != IMAGE_NT_SIGNATURE )
 			continue;
+
+		auto WideModuleName = std::wstring(
+			reinterpret_cast< LPCWSTR >( Buffer.data() ),
+			Entry.BaseDllName.Length / sizeof( WCHAR )
+		);
+		auto ModuleName = std::string(
+			WideModuleName.begin(),
+			WideModuleName.end( )
+		);
+
+		std::transform( 
+			ModuleName.begin( ), 
+			ModuleName.end( ), 
+			ModuleName.begin( ), 
+			[ ]( unsigned char c ) { 
+				return std::tolower( c ); 
+			} 
+		);
+
+		if ( ModuleName == "ntoskrnl.exe" )
+		{
+			/*
+				don't check this lol
+			*/
+
+			continue;
+		}
 
 		auto ModuleStart = ModuleBase;
 		auto ModuleEnd = ModuleBase + NtHeader.OptionalHeader.SizeOfImage;
@@ -281,7 +373,13 @@ VOID CallbackDetection::Run( const std::shared_ptr< Process >& Process, const st
 
 					EReportSeverity::Severe,
 					EReportFlags::AvoidCodeInjection
-					} );
+				} );
+
+				/*
+					we don't neccessarily need more results
+				*/
+
+				break;
 
 				CallbackArray += sizeof( ULONGLONG );
 			}
@@ -300,9 +398,9 @@ VOID CallbackDetection::Run( const std::shared_ptr< Process >& Process, const st
 				sizeof( IMAGE_EXPORT_DIRECTORY )
 			) ) continue;
 
-			std::vector< DWORD > NamesBuffer = {};
-			std::vector< DWORD > FunctionBuffer = { };
-			std::vector< WORD > OrdinalBuffer = { };
+			std::vector< DWORD > NamesBuffer( Export.NumberOfNames );
+			std::vector< DWORD > FunctionBuffer( Export.NumberOfFunctions );
+			std::vector< WORD > OrdinalBuffer( Export.NumberOfNames );
 
 			Memory->Read( ModuleBase + Export.AddressOfNames, NamesBuffer.data( ), Export.NumberOfNames * sizeof( DWORD ) );
 			Memory->Read( ModuleBase + Export.AddressOfFunctions, FunctionBuffer.data( ), Export.NumberOfFunctions * sizeof( DWORD ) );
@@ -313,26 +411,178 @@ VOID CallbackDetection::Run( const std::shared_ptr< Process >& Process, const st
 				WORD Ordinal = OrdinalBuffer[ i ];
 
 				DWORD FunctionRVA = FunctionBuffer[ Ordinal ];
-				PBYTE FunctionAddress = ModuleBase + FunctionRVA;
+				PBYTE Destination = ModuleBase + FunctionRVA;
 
-				if ( FunctionAddress > ModuleStart && FunctionAddress < ModuleEnd )
-					continue;
+				PBYTE OriginalDestination = Destination;
+
+				ExportAddressesSet.insert( Destination );
+
+				BYTE Buffer[ 32 ];
+				if ( Memory->Read(
+					Destination,
+					Buffer,
+					sizeof( Buffer )
+				) )
+				{
+					/*for ( int Offset = 0; Offset < sizeof( Buffer ); Offset++ )
+					{
+						INT InstructionLength = 0;
+
+						hde64s hs;
+						if ( ( InstructionLength = hde64_disasm( Buffer + Offset, &hs ) ) == 0 )
+							continue;
+
+						if ( hs.opcode == 0xC2 || hs.opcode == 0xC3 )
+							break;
+
+						if ( hs.opcode == 0xE9 || hs.opcode == 0xE8 )
+						{
+							Destination = Destination + Offset + InstructionLength + hs.imm.imm32;
+						}
+					}*/
+
+					/*
+						call/jmp 
+					*/
+					if ( Buffer[ 0 ] == 0xE9 )
+					{
+						Destination = Destination + 5 + *reinterpret_cast< INT32* >( Buffer + 1 );
+					}
+				}
 
 				char NameBuffer[ 256 ];
-				Memory->Read( ModuleBase + NamesBuffer[ i ], NameBuffer, sizeof( NameBuffer ) );
+				Memory->Read( ModuleBase + NamesBuffer[ i ], NameBuffer, sizeof( NameBuffer ) - 1 );
 
-				m_ReportData.Populate( ReportValue {
-					std::format( "Export: {} appears to be hooked (points to: {})", NameBuffer, Memory->ToString( FunctionAddress ) ),
-					EReportSeverity::Severe,
-					EReportFlags::None
-				} );
+				if ( Destination < ModuleStart || Destination > ModuleEnd )
+				{
+					m_ReportData.Populate( ReportValue {
+						std::format( "Export: {}!{} appears to be hooked (points to: {})", ModuleName, NameBuffer, Memory->ToString( Destination ) ),
+						EReportSeverity::Severe,
+						EReportFlags::AvoidCodeInjection
+					} );
+				}
+				else
+				{
+					NameByOrdinalMap[ ModuleName ][ Ordinal ] = NameBuffer;
+				}
 			}
 		}
 
-		/*
-			TODO: IAT Hooks
-		*/
+		Modules[ ModuleName ] = Module {
+			ModuleBase,
+			ModuleEnd,
+
+			NtHeader
+		};
 	} 
+
+	for ( auto& [ModuleName, Module] : Modules )
+	{
+		auto& ImportDirectory = Module.NtHeader.OptionalHeader.DataDirectory[ IMAGE_DIRECTORY_ENTRY_IMPORT ];
+
+		if ( ImportDirectory.Size < 1 || ImportDirectory.VirtualAddress < 1 )
+		{
+			continue;
+		}
+
+		DWORD ImportDescriptorRva = ImportDirectory.VirtualAddress;
+		
+		while ( true )
+		{
+			IMAGE_IMPORT_DESCRIPTOR Import {};
+			if ( !Memory->Read(
+				Module.Base + ImportDescriptorRva,
+				&Import,
+				sizeof( IMAGE_IMPORT_DESCRIPTOR )
+			) ) break;
+
+			if ( Import.Name == 0 || Import.FirstThunk == 0 )
+			{
+				break;
+			}
+
+			CHAR ImportedModuleNameBuffer[ 256 ] = { 0 };
+			if ( !Memory->Read( Module.Base + Import.Name, ImportedModuleNameBuffer, sizeof( ImportedModuleNameBuffer ) - 1 ) )
+			{
+				break;
+			}
+
+			std::string ImportedModuleName = ImportedModuleNameBuffer;
+			std::transform(
+				ImportedModuleName.begin( ),
+				ImportedModuleName.end( ),
+				ImportedModuleName.begin( ),
+				[ ]( unsigned char c ) {
+					return std::tolower( c );
+				}
+			);
+
+			if ( Modules.find( ImportedModuleName ) != Modules.end( ) )
+			{
+				auto& ImportedModule = Modules[ ImportedModuleName ];
+				auto& OrdinalNames = NameByOrdinalMap[ ImportedModuleName ];
+
+				auto& ExportDirectory = ImportedModule.NtHeader.OptionalHeader.DataDirectory[ IMAGE_DIRECTORY_ENTRY_EXPORT ];
+
+				DWORD ThunkRva = Import.OriginalFirstThunk ? Import.OriginalFirstThunk : Import.FirstThunk;
+				DWORD IATRva = Import.FirstThunk;
+
+				while ( true )
+				{
+					IMAGE_THUNK_DATA Thunk {};
+					IMAGE_THUNK_DATA IATThunk {};
+
+					if ( !Memory->Read( Module.Base + ThunkRva, &Thunk, sizeof( IMAGE_THUNK_DATA ) ) ) break;
+					if ( !Memory->Read( Module.Base + IATRva, &IATThunk, sizeof( IMAGE_THUNK_DATA ) ) ) break;
+
+					if ( Thunk.u1.AddressOfData == 0 ) break;
+
+					std::string FunctionName;
+
+					if ( IMAGE_SNAP_BY_ORDINAL( Thunk.u1.Ordinal ) )
+					{
+						WORD Ordinal = IMAGE_ORDINAL( Thunk.u1.Ordinal );
+
+						if ( OrdinalNames.find( Ordinal ) != OrdinalNames.end( ) )
+						{
+							FunctionName = OrdinalNames[ Ordinal ];
+						}
+						else
+						{
+							FunctionName = std::format( "Ordinal #{}", Ordinal );
+						}
+					}
+					else
+					{
+						CHAR FunctionNameBuffer[ 256 ] = { 0 };
+						Memory->Read( Module.Base + Thunk.u1.AddressOfData + sizeof( WORD ), FunctionNameBuffer, sizeof( FunctionNameBuffer ) - 1 );
+
+						FunctionName = FunctionNameBuffer;
+					}
+
+					PBYTE Address = reinterpret_cast< PBYTE >( IATThunk.u1.Function );
+
+					
+					if ( ExportAddressesSet.find( Address ) == ExportAddressesSet.end( ) )
+					{
+						if ( Address < ImportedModule.Base || Address > ImportedModule.End )
+						{
+							m_ReportData.Populate( ReportValue {
+								std::format( "Import: {}!{} @ {} appears to be hooked (points to: {})", ImportedModuleName, FunctionName, ModuleName, Memory->ToString( Address ) ),
+								EReportSeverity::Severe,
+								EReportFlags::AvoidCodeInjection
+							} );
+						}
+					}
+
+					ThunkRva += sizeof( IMAGE_THUNK_DATA );
+					IATRva += sizeof( IMAGE_THUNK_DATA );
+				}
+			}
+
+			ImportDescriptorRva += sizeof( IMAGE_IMPORT_DESCRIPTOR );
+		}
+	}
 
 	// TODO: Window Callbacks
 }
